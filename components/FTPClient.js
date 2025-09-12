@@ -482,27 +482,11 @@ const FTPClient = () => {
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center justify-center w-8 h-8">
-              <svg 
-                className="w-7 h-7" 
-                viewBox="0 0 32 32" 
-                fill="none" 
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <defs>
-                  <linearGradient id="foxGradientHeader" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style={{stopColor:"#FF6B35", stopOpacity:1}} />
-                    <stop offset="50%" style={{stopColor:"#FF4500", stopOpacity:1}} />
-                    <stop offset="100%" style={{stopColor:"#DC2626", stopOpacity:1}} />
-                  </linearGradient>
-                </defs>
-                <path d="M16 4 L11 8 L6 12 L6 18 L8 22 L12 24 L16 26 L20 24 L24 22 L26 18 L26 12 L21 8 L16 4 Z" 
-                      fill="url(#foxGradientHeader)"/>
-                <path d="M11 8 L9 4 L13 6 L11 8 Z" fill="url(#foxGradientHeader)"/>
-                <path d="M21 8 L23 4 L19 6 L21 8 Z" fill="url(#foxGradientHeader)"/>
-                <circle cx="13" cy="14" r="1.5" fill="white"/>
-                <circle cx="19" cy="14" r="1.5" fill="white"/>
-                <ellipse cx="16" cy="18" rx="1" ry="0.8" fill="#1F2937"/>
-              </svg>
+              <img 
+                src="/assets/icons/datafox-icon.svg" 
+                alt="DataFox" 
+                className="w-7 h-7"
+              />
             </div>
             <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
               DataFox
@@ -783,16 +767,11 @@ const FTPClient = () => {
                   transition={{ duration: 0.5 }}
                   className="relative mb-6"
                 >
-                  <div className="w-18 h-18 bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-600 rounded-2xl mx-auto shadow-2xl flex items-center justify-center">
-                    <svg
-                      className="w-9 h-9 text-white"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                    </svg>
-                  </div>
-                  <div className="absolute -inset-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl blur-xl opacity-30 animate-pulse"></div>
+                  <img 
+                    src="/assets/icons/datafox-icon.svg" 
+                    alt="DataFox" 
+                    className="w-32 h-32 mx-auto drop-shadow-lg"
+                  />
                 </motion.div>
 
                 {/* Content */}

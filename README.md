@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![DataFox Logo](assets/icons/datafox-icon.svg)
+![DataFox Logo](public/assets/icons/datafox-icon.svg)
 
 **A modern, beautiful, and intuitive FTP client for the modern developer**
 
@@ -272,7 +272,7 @@ DEBUG=datafox:*              # Enable debug logging
   "build": {
     "appId": "com.datafox.client",
     "productName": "DataFox",
-    "icon": "assets/icons/datafox-icon",
+    "icon": "public/assets/icons/datafox-icon",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [

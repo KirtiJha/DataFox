@@ -60,18 +60,18 @@
     },
     "files": [
       "src/**/*",
-      "assets/**/*",
+      "public/**/*",
       "node_modules/**/*"
     ],
     "mac": {
-      "icon": "assets/icons/icon.icns",
+      "icon": "public/assets/icons/icon.icns",
       "category": "public.app-category.productivity"
     },
     "win": {
-      "icon": "assets/icons/icon.ico"
+      "icon": "public/assets/icons/icon.ico"
     },
     "linux": {
-      "icon": "assets/icons/icon.png"
+      "icon": "public/assets/icons/icon.png"
     }
   }
 }

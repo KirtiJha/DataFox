@@ -47,7 +47,7 @@ class ModernFTPClient {
             },
             titleBarStyle: 'hiddenInset',
             show: false,
-            icon: path.join(__dirname, '../assets/icons/icon.png')
+            icon: path.join(__dirname, '../public/assets/icons/icon.png')
         });
 
         // Load the Next.js development server in development, or the built files in production
