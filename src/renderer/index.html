@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern FTP Client</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/themes.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Title Bar (macOS style) -->
+        <div class="title-bar">
+            <div class="title-bar-controls">
+                <div class="title-bar-button close"></div>
+                <div class="title-bar-button minimize"></div>
+                <div class="title-bar-button maximize"></div>
+            </div>
+            <div class="title-bar-title">Modern FTP Client</div>
+            <div class="title-bar-actions">
+                <div class="connection-status" id="connectionStatus">
+                    <i class="fas fa-circle status-indicator"></i>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Container -->
+        <div class="main-container">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h2><i class="fas fa-bookmark"></i> Connections</h2>
+                    <div class="sidebar-actions">
+                        <button class="btn btn-small btn-primary" id="newConnectionBtn">
+                            <i class="fas fa-plus"></i> New
+                        </button>
+                        <button class="btn btn-small btn-secondary" id="quickConnectSidebarBtn" title="Quick Connect">
+                            <i class="fas fa-bolt"></i> Quick
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="bookmarkSearch" placeholder="Search connections...">
+                </div>
+
+                <div class="bookmarks-container">
+                    <div class="bookmarks-section">
+                        <h3><i class="fas fa-clock"></i> Recent</h3>
+                        <div id="recentBookmarks" class="bookmarks-list"></div>
+                    </div>
+                    
+                    <div class="bookmarks-section">
+                        <h3><i class="fas fa-star"></i> Favorites</h3>
+                        <div id="favoriteBookmarks" class="bookmarks-list"></div>
+                    </div>
+                    
+                    <div class="bookmarks-section">
+                        <h3><i class="fas fa-folder"></i> All Connections</h3>
+                        <div id="allBookmarks" class="bookmarks-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Toolbar -->
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <div class="path-breadcrumb">
+                            <button class="btn btn-small" id="homeBtn" title="Go Home">
+                                <i class="fas fa-home"></i>
+                            </button>
+                            <button class="btn btn-small" id="backBtn" disabled title="Go Back">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <button class="btn btn-small" id="forwardBtn" disabled title="Go Forward">
+                                <i class="fas fa-arrow-right"></i>
+                            </button>
+                            <button class="btn btn-small" id="upBtn" disabled title="Go Up">
+                                <i class="fas fa-arrow-up"></i>
+                            </button>
+                            <button class="btn btn-small" id="refreshBtn" title="Refresh">
+                                <i class="fas fa-sync"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="path-input-container">
+                            <input type="text" id="pathInput" class="path-input" placeholder="Enter path..." readonly>
+                            <button class="btn btn-small" id="goBtn">Go</button>
+                        </div>
+                    </div>
+
+                    <div class="toolbar-right">
+                        <button class="btn btn-small" id="uploadBtn" disabled>
+                            <i class="fas fa-upload"></i> Upload
+                        </button>
+                        <button class="btn btn-small" id="downloadBtn" disabled>
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                        <button class="btn btn-small" id="newFolderBtn" disabled>
+                            <i class="fas fa-folder-plus"></i> New Folder
+                        </button>
+                        <button class="btn btn-small" id="deleteBtn" disabled>
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+
+                <!-- File Explorer -->
+                <div class="file-explorer">
+                    <!-- Local Panel -->
+                    <div class="panel local-panel">
+                        <div class="panel-header">
+                            <h3><i class="fas fa-laptop"></i> Local</h3>
+                            <div class="panel-actions">
+                                <button class="btn btn-xsmall" id="selectLocalFolderBtn" title="Select Local Folder">
+                                    <i class="fas fa-folder-open"></i>
+                                </button>
+                                <button class="btn btn-xsmall view-toggle" data-view="grid" title="Grid View">
+                                    <i class="fas fa-th"></i>
+                                </button>
+                                <button class="btn btn-xsmall view-toggle active" data-view="list" title="List View">
+                                    <i class="fas fa-list"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="panel-path">
+                            <input type="text" id="localPath" class="panel-path-input" placeholder="Select local folder..." readonly>
+                        </div>
+                        <div class="file-list" id="localFileList">
+                            <div class="empty-state">
+                                <i class="fas fa-folder-open"></i>
+                                <p>Select a local folder to browse files</p>
+                                <button class="btn btn-primary" id="selectFolderBtn">Select Folder</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Remote Panel -->
+                    <div class="panel remote-panel">
+                        <div class="panel-header">
+                            <h3><i class="fas fa-server"></i> Remote</h3>
+                            <div class="panel-actions">
+                                <button class="btn btn-xsmall view-toggle" data-view="grid" title="Grid View">
+                                    <i class="fas fa-th"></i>
+                                </button>
+                                <button class="btn btn-xsmall view-toggle active" data-view="list" title="List View">
+                                    <i class="fas fa-list"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="panel-path">
+                            <input type="text" id="remotePath" class="panel-path-input" placeholder="/home/user" readonly>
+                        </div>
+                        <div class="file-list" id="remoteFileList">
+                            <div class="empty-state">
+                                <i class="fas fa-server"></i>
+                                <p>Connect to a server to browse remote files</p>
+                                <button class="btn btn-primary" id="connectBtn">Connect</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transfer Queue -->
+                <div class="transfer-queue" id="transferQueue">
+                    <div class="transfer-header">
+                        <h3><i class="fas fa-exchange-alt"></i> Transfer Queue</h3>
+                        <div class="transfer-actions">
+                            <button class="btn btn-xsmall" id="clearQueueBtn">
+                                <i class="fas fa-broom"></i> Clear
+                            </button>
+                            <button class="btn btn-xsmall" id="toggleQueueBtn" title="Toggle Transfer Queue">
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="transfer-list" id="transferList">
+                        <!-- Transfer items will be added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <span id="statusText">Ready</span>
+            </div>
+            <div class="status-center">
+                <span id="fileCount">0 files</span>
+            </div>
+            <div class="status-right">
+                <span id="transferSpeed"></span>
+                <span id="connectionInfo"></span>
+            </div>
+        </div>
+
+        <!-- Modals -->
+        <div id="modalOverlay" class="modal-overlay">
+            <!-- Connection Modal -->
+            <div id="connectionModal" class="modal">
+                <div class="modal-header">
+                    <h2 id="connectionModalTitle">New Connection</h2>
+                    <button class="btn btn-icon modal-close" title="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="connectionForm">
+                        <div class="form-tabs">
+                            <button type="button" class="tab-button active" data-tab="general">General</button>
+                            <button type="button" class="tab-button" data-tab="advanced">Advanced</button>
+                        </div>
+
+                        <div class="tab-content active" id="general-tab">
+                            <div class="form-group">
+                                <label for="connectionName">Connection Name</label>
+                                <input type="text" id="connectionName" required>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="protocol">Protocol</label>
+                                    <select id="protocol">
+                                        <option value="ftp">FTP</option>
+                                        <option value="ftps">FTPS (SSL/TLS)</option>
+                                        <option value="sftp">SFTP (SSH)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="host">Server</label>
+                                    <input type="text" id="host" required placeholder="ftp.example.com">
+                                </div>
+                                <div class="form-group">
+                                    <label for="port">Port</label>
+                                    <input type="number" id="port" placeholder="21">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="username">Username</label>
+                                    <input type="text" id="username" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="password">Password</label>
+                                    <input type="password" id="password">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="remotePath">Remote Path</label>
+                                <input type="text" id="remotePath" placeholder="/" value="/">
+                            </div>
+                        </div>
+
+                        <div class="tab-content" id="advanced-tab">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="passive"> Use Passive Mode (FTP)
+                                </label>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="privateKey">Private Key File (SFTP)</label>
+                                <input type="file" id="privateKey" accept=".pem,.ppk,.key">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="encoding">Encoding</label>
+                                <select id="encoding">
+                                    <option value="utf8">UTF-8</option>
+                                    <option value="ascii">ASCII</option>
+                                    <option value="binary">Binary</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="notes">Notes</label>
+                                <textarea id="notes" rows="3" placeholder="Connection notes..."></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="tags">Tags</label>
+                                <input type="text" id="tags" placeholder="work, development, production">
+                                <small>Separate tags with commas</small>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                    <button type="button" class="btn btn-secondary" id="testConnectionBtn">Test Connection</button>
+                    <button type="button" class="btn btn-primary" id="saveConnectionBtn">Save & Connect</button>
+                </div>
+            </div>
+
+            <!-- Quick Connect Modal -->
+            <div id="quickConnectModal" class="modal">
+                <div class="modal-header">
+                    <h2>Quick Connect</h2>
+                    <button class="btn btn-icon modal-close" title="Close" aria-label="Close modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="quickConnectForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="quickProtocol">Protocol</label>
+                                <select id="quickProtocol">
+                                    <option value="ftp">FTP</option>
+                                    <option value="ftps">FTPS</option>
+                                    <option value="sftp">SFTP</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="quickHost">Server</label>
+                                <input type="text" id="quickHost" required placeholder="ftp.example.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="quickPort">Port</label>
+                                <input type="number" id="quickPort" placeholder="21">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="quickUsername">Username</label>
+                                <input type="text" id="quickUsername" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="quickPassword">Password</label>
+                                <input type="password" id="quickPassword">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="quickConnectBtn">Connect</button>
+                </div>
+            </div>
+
+            <!-- Rename Modal -->
+            <div id="renameModal" class="modal small">
+                <div class="modal-header">
+                    <h2>Rename</h2>
+                    <button class="btn btn-icon modal-close" title="Close" aria-label="Close modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="newName">New Name</label>
+                        <input type="text" id="newName" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmRenameBtn">Rename</button>
+                </div>
+            </div>
+
+            <!-- New Folder Modal -->
+            <div id="newFolderModal" class="modal small">
+                <div class="modal-header">
+                    <h2>New Folder</h2>
+                    <button class="btn btn-icon modal-close" title="Close" aria-label="Close modal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="folderName">Folder Name</label>
+                        <input type="text" id="folderName" required placeholder="New Folder">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="createFolderBtn">Create</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div id="contextMenu" class="context-menu">
+            <div class="context-menu-item" data-action="download">
+                <i class="fas fa-download"></i> Download
+            </div>
+            <div class="context-menu-item" data-action="upload">
+                <i class="fas fa-upload"></i> Upload Here
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" data-action="rename">
+                <i class="fas fa-edit"></i> Rename
+            </div>
+            <div class="context-menu-item" data-action="delete">
+                <i class="fas fa-trash"></i> Delete
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" data-action="properties">
+                <i class="fas fa-info-circle"></i> Properties
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toastContainer" class="toast-container"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/fileManager.js"></script>
+    <script src="js/transferManager.js"></script>
+    <script src="js/bookmarkManager.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

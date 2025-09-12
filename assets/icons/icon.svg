@@ -1,0 +1,38 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="foxGradientLarge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#FF4500;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#DC2626;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGradientLarge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563EB;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Fox Head - Main Body -->
+  <path d="M256 64 L176 128 L96 192 L96 288 L128 352 L192 384 L256 416 L320 384 L384 352 L416 288 L416 192 L336 128 L256 64 Z" 
+        fill="url(#foxGradientLarge)" 
+        stroke="none"/>
+  
+  <!-- Fox Ears -->
+  <path d="M176 128 L144 64 L208 96 L176 128 Z" fill="url(#foxGradientLarge)"/>
+  <path d="M336 128 L368 64 L304 96 L336 128 Z" fill="url(#foxGradientLarge)"/>
+  
+  <!-- Inner Ears -->
+  <path d="M176 112 L160 80 L192 96 L176 112 Z" fill="url(#accentGradientLarge)"/>
+  <path d="M336 112 L352 80 L320 96 L336 112 Z" fill="url(#accentGradientLarge)"/>
+  
+  <!-- Eyes -->
+  <circle cx="208" cy="224" r="24" fill="white"/>
+  <circle cx="304" cy="224" r="24" fill="white"/>
+  <circle cx="208" cy="216" r="12" fill="#1F2937"/>
+  <circle cx="304" cy="216" r="12" fill="#1F2937"/>
+  
+  <!-- Snout -->
+  <path d="M256 256 L224 288 L256 320 L288 288 L256 256 Z" fill="url(#foxGradientLarge)" opacity="0.8"/>
+  
+  <!-- Nose -->
+  <ellipse cx="256" cy="288" rx="16" ry="12" fill="#1F2937"/>
+</svg>
