@@ -56,8 +56,19 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 - **Smart Navigation** - Breadcrumb paths and quick directory access
 - **File Operations** - Create, rename, delete, and manage permissions
 - **Advanced Sorting** - Sort by name, size, date, or type
-- **File Preview** - Quick preview for supported file types
+- **File Preview** - Quick preview for JSON, CSV, Parquet, and text files
 - **Batch Operations** - Handle multiple files efficiently
+- **Real-time Updates** - Live file status and modification tracking
+
+### 🔍 **Advanced Search & Content Discovery**
+- **Global File Search** - Find files across entire directory structure
+- **Content Search** - Search within file contents (JSON, CSV, Parquet)
+- **AI-Powered Semantic Search** - Intelligent content understanding using LanceDB
+- **Smart Filters** - Filter by file type, size, date, and custom criteria
+- **Search History** - Track and revisit previous searches
+- **Unified Search Interface** - Combine filename, content, and semantic search
+- **Result Highlighting** - Visual highlighting of search matches
+- **Pagination** - Efficient handling of large search result sets
 
 ### 🔖 **Smart Bookmark System**
 - **Visual Bookmarks** - Save connections with custom names and descriptions
@@ -68,11 +79,14 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 
 ### 🚀 **Advanced Features**
 - **Transfer Queue** - Monitor uploads/downloads with progress tracking
-- **Background Transfers** - Non-blocking file operations
+- **Background Transfers** - Non-blocking file operations with adjustable concurrency
 - **Connection Monitoring** - Real-time status updates and auto-reconnection
 - **Error Recovery** - Intelligent error handling with retry mechanisms
 - **Keyboard Shortcuts** - Power user shortcuts for everything
 - **Secure Storage** - Encrypted credential storage
+- **Content Indexing** - Automatic indexing of JSON/Parquet files for search
+- **Export Functionality** - Export search results to JSON/CSV formats
+- **Navigation Memory** - Return to previous search results seamlessly
 
 ### 🛡️ **Security & Privacy**
 - **Context Isolation** - Secure Electron architecture
@@ -113,6 +127,8 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 ### 📚 Key Libraries
 - **FTP Libraries**: `basic-ftp`, `ssh2-sftp-client`
 - **S3 Support**: `@aws-sdk/client-s3`
+- **Search Engine**: `@lancedb/lancedb`, `@xenova/transformers`, `fuse.js`
+- **File Processing**: `@dsnp/parquetjs`, `parquet-wasm`
 - **State Management**: React Hooks + Context
 - **Notifications**: React Hot Toast
 - **Icons**: Heroicons
@@ -127,8 +143,8 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 **[📥 Download Latest Release](https://github.com/yourusername/datafox/releases/latest)**
 
 Available for:
-- 🍎 **macOS** (Intel & Apple Silicon)
-- 🪟 **Windows** (x64)
+- 🍎 **macOS** (Intel & Apple Silicon) - DMG files ready for distribution
+- 🪟 **Windows** (x64) - NSIS installer
 - 🐧 **Linux** (AppImage, deb, rpm)
 
 ### 🔧 Development Setup
@@ -157,8 +173,16 @@ npm run dev
 # Build for production
 npm run build:electron
 
-# Package for distribution
+# Package for distribution (creates DMG/installer)
 npm run dist
+
+# Build for specific platforms
+npm run dist:mac    # macOS DMG files
+npm run dist:win    # Windows installer
+npm run dist:linux  # Linux packages
+
+# Use automated build script
+./build-release.sh
 ```
 
 ---
@@ -188,8 +212,13 @@ npm run dist
 | **Download Files** | Right-click → Download | `Cmd+D` |
 | **Create Folder** | Click folder button | `Cmd+Shift+N` |
 | **Delete Items** | Select → Delete | `Delete` |
+| **Preview File** | Click preview button | `Space` |
+| **Search Files** | Use search bar | `Cmd+F` |
+| **Filter Results** | Use filter panel | `Cmd+Shift+F` |
+| **Export Results** | Search → Export button | `Cmd+E` |
 | **Refresh View** | Click refresh button | `F5` |
 | **Navigate Up** | Click up arrow | `Backspace` |
+| **Back to Search** | Click back button after navigation | `Cmd+B` |
 
 ### 🔖 Bookmark Management
 
@@ -208,10 +237,18 @@ npm run dist
 #### File Operations
 - `Cmd+U` / `Ctrl+U` - Upload Files
 - `Cmd+Shift+N` / `Ctrl+Shift+N` - Create Folder
+- `Space` - Preview Selected File
 - `F5` - Refresh Directory
 - `Backspace` - Navigate Up
 - `Delete` - Delete Selected
 - `Cmd+A` / `Ctrl+A` - Select All
+
+#### Search & Discovery
+- `Cmd+F` / `Ctrl+F` - Open Search
+- `Cmd+Shift+F` / `Ctrl+Shift+F` - Advanced Filters
+- `Cmd+E` / `Ctrl+E` - Export Search Results
+- `Cmd+B` / `Ctrl+B` - Back to Search Results
+- `Escape` - Clear Search/Close Modals
 
 #### Interface
 - `Cmd+,` / `Ctrl+,` - Preferences
@@ -230,18 +267,31 @@ datafox/
 │   ├── managers/             # Protocol managers
 │   │   ├── ftpManager.js     # FTP/SFTP handling
 │   │   └── s3Manager.js      # S3 connections
+│   ├── mainSemanticSearchEngine.js # AI search engine
 │   └── preload.js            # Secure IPC bridge
 ├── 🖼️ components/            # React components
 │   ├── FTPClient.js          # Main application
-│   ├── FileExplorer.js       # File browser
+│   ├── FileExplorer.js       # File browser with search
+│   ├── SearchResults.js      # Search results display
+│   ├── ContentSearchPanel.js # Content search interface
+│   ├── FilterPanel.js        # Advanced filtering
+│   ├── PreviewModal.js       # File preview modal
 │   ├── ConnectionModal.js    # Connection dialog
 │   ├── BookmarkModal.js      # Bookmark management
 │   └── StatusBar.js          # Status display
+├── 🔍 utils/                 # Search utilities
+│   ├── BrowserSemanticSearchEngine.js # Client-side AI search
+│   ├── unifiedSearchEngine.js # Combined search logic
+│   └── searchEngine.js       # Core search functionality
 ├── 🎨 styles/                # Styling
 │   └── globals.css           # Tailwind configuration
 ├── 🦊 assets/                # Brand assets
 │   ├── icons/                # App icons
 │   └── screenshots/          # Documentation images
+├── 🏗️ build/                 # Build configuration
+│   ├── entitlements.mac.plist # macOS security entitlements
+│   ├── background.png        # DMG background
+│   └── build-release.sh      # Automated build script
 └── 📋 docs/                  # Documentation
 ```
 
@@ -329,9 +379,11 @@ We welcome contributions! Here's how to get started:
 ### 🔜 Coming Soon
 - [ ] **Cloud Integrations** - Google Drive, Dropbox, OneDrive
 - [ ] **Sync Functionality** - Bidirectional folder synchronization
-- [ ] **Advanced Search** - Find files across connections
+- [ ] **Enhanced AI Search** - Multi-language support and advanced embeddings
 - [ ] **Plugins System** - Extensible architecture
 - [ ] **Team Features** - Shared bookmarks and connections
+- [ ] **Search Analytics** - Usage insights and search optimization
+- [ ] **Batch Content Operations** - Bulk file processing and transformation
 
 ### 🎯 Future Vision
 - [ ] **Mobile App** - iOS/Android companion
@@ -346,10 +398,12 @@ We welcome contributions! Here's how to get started:
 DataFox is optimized for speed and efficiency:
 
 - **🚀 Fast Startup** - < 2 seconds cold start
-- **💾 Low Memory** - < 100MB typical usage
-- **⚡ Efficient Transfers** - Multi-threaded operations
-- **🔄 Smart Caching** - Intelligent directory caching
-- **📱 Responsive UI** - 60fps animations
+- **💾 Low Memory** - < 150MB typical usage (includes AI search indexing)
+- **⚡ Efficient Transfers** - Configurable concurrency (up to 200 concurrent downloads)
+- **🔄 Smart Caching** - Intelligent directory and search result caching
+- **📱 Responsive UI** - 60fps animations with optimized pagination
+- **🧠 AI Search** - Local LanceDB vector database for semantic search
+- **📊 Content Indexing** - Automatic background indexing of JSON/Parquet files
 
 ---
 

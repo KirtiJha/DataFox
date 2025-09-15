@@ -302,3 +302,8 @@ ipcMain.handle('dialog-save-file', async (event, options = {}) => {
   });
   return result;
 });
+
+// System Operations
+ipcMain.handle('get-user-data-path', () => {
+  return app.getPath('userData');
+});

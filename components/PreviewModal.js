@@ -1,137 +1,146 @@
-import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  XMarkIcon, 
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  XMarkIcon,
   DocumentTextIcon,
   TableCellsIcon,
-  ArrowDownTrayIcon 
-} from '@heroicons/react/24/outline'
+  ArrowDownTrayIcon,
+} from "@heroicons/react/24/outline";
 
 const PreviewModal = ({ isOpen, onClose, previewData, onDownload }) => {
-  const [formattedContent, setFormattedContent] = useState('')
-  const [isTableView, setIsTableView] = useState(false)
-  const [tableData, setTableData] = useState(null)
+  const [formattedContent, setFormattedContent] = useState("");
+  const [isTableView, setIsTableView] = useState(false);
+  const [tableData, setTableData] = useState(null);
 
   useEffect(() => {
     if (previewData?.content) {
-      formatContent(previewData.content, previewData.fileType)
+      formatContent(previewData.content, previewData.fileType);
     } else {
       // Reset state when no data
-      setFormattedContent('')
-      setIsTableView(false)
-      setTableData(null)
+      setFormattedContent("");
+      setIsTableView(false);
+      setTableData(null);
     }
-  }, [previewData])
+  }, [previewData]);
 
   const formatContent = (content, fileType) => {
     try {
       // Handle case where content might be an object
-      let contentStr = content
-      if (typeof content === 'object') {
-        contentStr = JSON.stringify(content, null, 2)
-      } else if (typeof content !== 'string') {
-        contentStr = String(content)
+      let contentStr = content;
+      if (typeof content === "object") {
+        contentStr = JSON.stringify(content, null, 2);
+      } else if (typeof content !== "string") {
+        contentStr = String(content);
       }
 
       switch (fileType) {
-        case 'json':
+        case "json":
           // Try to parse and format JSON
-          setIsTableView(false)
-          setTableData(null)
+          setIsTableView(false);
+          setTableData(null);
           try {
-            const parsed = JSON.parse(contentStr)
-            const formatted = JSON.stringify(parsed, null, 2)
-            setFormattedContent(formatted)
+            const parsed = JSON.parse(contentStr);
+            const formatted = JSON.stringify(parsed, null, 2);
+            setFormattedContent(formatted);
           } catch {
             // If parsing fails, show raw content
-            setFormattedContent(contentStr)
+            setFormattedContent(contentStr);
           }
-          break
-        case 'parquet':
+          break;
+        case "parquet":
           // Handle Parquet data specially
           try {
-            const parquetData = JSON.parse(contentStr)
-            if (parquetData.previewRows && Array.isArray(parquetData.previewRows)) {
+            const parquetData = JSON.parse(contentStr);
+            if (
+              parquetData.previewRows &&
+              Array.isArray(parquetData.previewRows)
+            ) {
               // Set up table view for Parquet
-              setIsTableView(true)
-              setTableData(parquetData)
-              
+              setIsTableView(true);
+              setTableData(parquetData);
+
               // Also set a text summary for copy functionality
-              let formatted = `Parquet File Preview\n`
-              formatted += `Total Rows: ${parquetData.rowCount || 'Unknown'}\n`
-              formatted += `Columns: ${parquetData.columnCount || 'Unknown'}\n`
-              formatted += `${parquetData.message || ''}\n\n`
-              
+              let formatted = `Parquet File Preview\n`;
+              formatted += `Total Rows: ${parquetData.rowCount || "Unknown"}\n`;
+              formatted += `Columns: ${parquetData.columnCount || "Unknown"}\n`;
+              formatted += `${parquetData.message || ""}\n\n`;
+
               if (parquetData.previewRows.length > 0) {
                 // Get column names from first row
-                const columns = Object.keys(parquetData.previewRows[0])
-                
+                const columns = Object.keys(parquetData.previewRows[0]);
+
                 // Create table header
-                formatted += columns.join('\t') + '\n'
-                formatted += columns.map(() => '---').join('\t') + '\n'
-                
+                formatted += columns.join("\t") + "\n";
+                formatted += columns.map(() => "---").join("\t") + "\n";
+
                 // Add data rows
-                parquetData.previewRows.forEach(row => {
-                  formatted += columns.map(col => {
-                    const val = row[col]
-                    return val === null || val === undefined ? 'null' : String(val)
-                  }).join('\t') + '\n'
-                })
+                parquetData.previewRows.forEach((row) => {
+                  formatted +=
+                    columns
+                      .map((col) => {
+                        const val = row[col];
+                        return val === null || val === undefined
+                          ? "null"
+                          : String(val);
+                      })
+                      .join("\t") + "\n";
+                });
               }
-              
-              setFormattedContent(formatted)
+
+              setFormattedContent(formatted);
             } else {
               // Fallback to JSON formatting
-              setIsTableView(false)
-              setTableData(null)
-              setFormattedContent(JSON.stringify(parquetData, null, 2))
+              setIsTableView(false);
+              setTableData(null);
+              setFormattedContent(JSON.stringify(parquetData, null, 2));
             }
           } catch {
-            setIsTableView(false)
-            setTableData(null)
-            setFormattedContent(contentStr)
+            setIsTableView(false);
+            setTableData(null);
+            setFormattedContent(contentStr);
           }
-          break
-        case 'txt':
-        case 'csv':
-          setFormattedContent(contentStr)
-          break
+          break;
+        case "txt":
+        case "csv":
+          setFormattedContent(contentStr);
+          break;
         default:
-          setFormattedContent(contentStr)
+          setFormattedContent(contentStr);
       }
     } catch (error) {
-      console.error('formatContent error:', error)
-      setFormattedContent('Error formatting content: ' + error.message)
+      console.error("formatContent error:", error);
+      setFormattedContent("Error formatting content: " + error.message);
     }
-  }
+  };
 
   const getFileIcon = (fileType) => {
     switch (fileType) {
-      case 'json':
-        return <DocumentTextIcon className="w-6 h-6 text-amber-500" />
-      case 'parquet':
-        return <TableCellsIcon className="w-6 h-6 text-green-500" />
-      case 'txt':
-        return <DocumentTextIcon className="w-6 h-6 text-gray-500" />
-      case 'csv':
-        return <TableCellsIcon className="w-6 h-6 text-emerald-500" />
+      case "json":
+        return <DocumentTextIcon className="w-6 h-6 text-amber-500" />;
+      case "parquet":
+        return <TableCellsIcon className="w-6 h-6 text-green-500" />;
+      case "txt":
+        return <DocumentTextIcon className="w-6 h-6 text-gray-500" />;
+      case "csv":
+        return <TableCellsIcon className="w-6 h-6 text-emerald-500" />;
       default:
-        return <DocumentTextIcon className="w-6 h-6 text-gray-500" />
+        return <DocumentTextIcon className="w-6 h-6 text-gray-500" />;
     }
-  }
+  };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(formattedContent)
+    navigator.clipboard
+      .writeText(formattedContent)
       .then(() => {
         // Could add a toast notification here
-        console.log('Content copied to clipboard')
+        console.log("Content copied to clipboard");
       })
-      .catch(err => {
-        console.error('Failed to copy content: ', err)
-      })
-  }
+      .catch((err) => {
+        console.error("Failed to copy content: ", err);
+      });
+  };
 
-  if (!isOpen || !previewData) return null
+  if (!isOpen || !previewData) return null;
 
   return (
     <AnimatePresence>
@@ -144,7 +153,7 @@ const PreviewModal = ({ isOpen, onClose, previewData, onDownload }) => {
           className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           onClick={onClose}
         />
-        
+
         {/* Modal */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -165,7 +174,7 @@ const PreviewModal = ({ isOpen, onClose, previewData, onDownload }) => {
                 </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               <button
                 onClick={copyToClipboard}
@@ -174,11 +183,11 @@ const PreviewModal = ({ isOpen, onClose, previewData, onDownload }) => {
               >
                 Copy
               </button>
-              
+
               <button
                 onClick={() => {
-                  onDownload && onDownload()
-                  onClose()
+                  onDownload && onDownload();
+                  onClose();
                 }}
                 className="px-3 py-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors flex items-center gap-1"
                 title="Download File"
@@ -186,7 +195,7 @@ const PreviewModal = ({ isOpen, onClose, previewData, onDownload }) => {
                 <ArrowDownTrayIcon className="w-4 h-4" />
                 Download
               </button>
-              
+
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -195,57 +204,80 @@ const PreviewModal = ({ isOpen, onClose, previewData, onDownload }) => {
               </button>
             </div>
           </div>
-          
+
           {/* Content */}
           <div className="p-6 max-h-[70vh] overflow-auto">
             {isTableView && tableData ? (
               // Render table view for Parquet data
               <div className="space-y-4">
                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                  <p><strong>Total Rows:</strong> {tableData.rowCount}</p>
-                  <p><strong>Columns:</strong> {tableData.columnCount}</p>
-                  <p><strong>Message:</strong> {tableData.message}</p>
+                  <p>
+                    <strong>Total Rows:</strong> {tableData.rowCount}
+                  </p>
+                  <p>
+                    <strong>Columns:</strong> {tableData.columnCount}
+                  </p>
+                  <p>
+                    <strong>Message:</strong> {tableData.message}
+                  </p>
                   {tableData.schema && tableData.schema.length > 0 && (
                     <div className="mt-2">
                       <strong>Schema:</strong>
                       <div className="ml-4 text-xs">
                         {tableData.schema.map((field, idx) => (
-                          <div key={idx}>{field.name}: {field.type}</div>
+                          <div key={idx}>
+                            {field.name}: {field.type}
+                          </div>
                         ))}
                       </div>
                     </div>
                   )}
                 </div>
-                
+
                 {tableData.previewRows && tableData.previewRows.length > 0 && (
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-xs border border-gray-300 dark:border-gray-600">
                       <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                          {Object.keys(tableData.previewRows[0]).map((column, idx) => (
-                            <th 
-                              key={idx} 
-                              className="px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 border-r border-gray-300 dark:border-gray-600"
-                            >
-                              {column}
-                            </th>
-                          ))}
+                          {Object.keys(tableData.previewRows[0]).map(
+                            (column, idx) => (
+                              <th
+                                key={idx}
+                                className="px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 border-r border-gray-300 dark:border-gray-600"
+                              >
+                                {column}
+                              </th>
+                            )
+                          )}
                         </tr>
                       </thead>
                       <tbody>
                         {tableData.previewRows.map((row, rowIdx) => (
-                          <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-750'}>
-                            {Object.keys(tableData.previewRows[0]).map((column, colIdx) => (
-                              <td 
-                                key={colIdx} 
-                                className="px-2 py-1 border-r border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
-                              >
-                                {row[column] === null || row[column] === undefined ? 
-                                  <span className="text-gray-400 italic">null</span> : 
-                                  String(row[column])
-                                }
-                              </td>
-                            ))}
+                          <tr
+                            key={rowIdx}
+                            className={
+                              rowIdx % 2 === 0
+                                ? "bg-white dark:bg-gray-800"
+                                : "bg-gray-100 dark:bg-gray-700"
+                            }
+                          >
+                            {Object.keys(tableData.previewRows[0]).map(
+                              (column, colIdx) => (
+                                <td
+                                  key={colIdx}
+                                  className="px-2 py-1 border-r border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
+                                >
+                                  {row[column] === null ||
+                                  row[column] === undefined ? (
+                                    <span className="text-gray-400 italic">
+                                      null
+                                    </span>
+                                  ) : (
+                                    String(row[column])
+                                  )}
+                                </td>
+                              )
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -263,7 +295,7 @@ const PreviewModal = ({ isOpen, onClose, previewData, onDownload }) => {
         </motion.div>
       </div>
     </AnimatePresence>
-  )
-}
+  );
+};
 
-export default PreviewModal
+export default PreviewModal;

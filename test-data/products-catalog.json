@@ -1,0 +1,78 @@
+{
+  "products": [
+    {
+      "productId": "PROD-001",
+      "name": "Wireless Headphones",
+      "category": "Electronics",
+      "price": 199.99,
+      "currency": "USD",
+      "inStock": true,
+      "inventory": {
+        "warehouse": "WH-001",
+        "quantity": 150,
+        "lastRestocked": "2024-01-10"
+      },
+      "specifications": {
+        "batteryLife": "30 hours",
+        "connectivity": ["Bluetooth 5.0", "USB-C"],
+        "weight": "250g",
+        "colors": ["Black", "White", "Silver"]
+      },
+      "reviews": {
+        "averageRating": 4.5,
+        "totalReviews": 128,
+        "breakdown": {
+          "5star": 75,
+          "4star": 35,
+          "3star": 12,
+          "2star": 4,
+          "1star": 2
+        }
+      }
+    },
+    {
+      "productId": "PROD-002", 
+      "name": "Smart Watch",
+      "category": "Wearables",
+      "price": 299.99,
+      "currency": "USD",
+      "inStock": true,
+      "inventory": {
+        "warehouse": "WH-002",
+        "quantity": 85,
+        "lastRestocked": "2024-01-12"
+      },
+      "specifications": {
+        "batteryLife": "7 days",
+        "connectivity": ["Bluetooth", "WiFi", "GPS"],
+        "weight": "45g",
+        "colors": ["Space Gray", "Rose Gold", "Silver"]
+      },
+      "reviews": {
+        "averageRating": 4.2,
+        "totalReviews": 96,
+        "breakdown": {
+          "5star": 52,
+          "4star": 28,
+          "3star": 11,
+          "2star": 3,
+          "1star": 2
+        }
+      }
+    }
+  ],
+  "analytics": {
+    "totalProducts": 2,
+    "totalValue": 499.98,
+    "categories": {
+      "Electronics": 1,
+      "Wearables": 1
+    },
+    "stockStatus": {
+      "inStock": 2,
+      "outOfStock": 0,
+      "lowStock": 0
+    }
+  },
+  "lastUpdated": "2024-01-15T14:22:00Z"
+}

@@ -1,0 +1,84 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john.doe@example.com",
+      "age": 30,
+      "department": "Engineering",
+      "skills": ["JavaScript", "React", "Node.js"],
+      "address": {
+        "street": "123 Main St",
+        "city": "San Francisco",
+        "state": "CA",
+        "zipCode": "94102"
+      },
+      "projects": [
+        {
+          "name": "E-commerce Platform",
+          "status": "completed",
+          "technologies": ["React", "Express", "MongoDB"]
+        },
+        {
+          "name": "Analytics Dashboard",
+          "status": "in-progress",
+          "technologies": ["Vue.js", "Python", "PostgreSQL"]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Jane Smith",
+      "email": "jane.smith@example.com", 
+      "age": 28,
+      "department": "Design",
+      "skills": ["Figma", "Photoshop", "UI/UX"],
+      "address": {
+        "street": "456 Oak Ave",
+        "city": "New York",
+        "state": "NY",
+        "zipCode": "10001"
+      },
+      "projects": [
+        {
+          "name": "Mobile App Redesign",
+          "status": "completed",
+          "technologies": ["Figma", "Sketch"]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Bob Johnson",
+      "email": "bob.johnson@example.com",
+      "age": 35,
+      "department": "Engineering",
+      "skills": ["Python", "Django", "PostgreSQL"],
+      "address": {
+        "street": "789 Pine St",
+        "city": "Seattle",
+        "state": "WA",
+        "zipCode": "98101"
+      },
+      "projects": [
+        {
+          "name": "Data Pipeline",
+          "status": "in-progress",
+          "technologies": ["Python", "Apache Kafka", "Redis"]
+        },
+        {
+          "name": "Machine Learning Model",
+          "status": "planning",
+          "technologies": ["Python", "TensorFlow", "Jupyter"]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "totalUsers": 3,
+    "departments": ["Engineering", "Design"],
+    "lastUpdated": "2024-01-15T10:30:00Z",
+    "version": "1.2.0",
+    "dataSource": "HR System"
+  }
+}

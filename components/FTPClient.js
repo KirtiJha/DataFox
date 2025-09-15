@@ -42,11 +42,26 @@ const FTPClient = () => {
   const [loading, setLoading] = useState(false);
   const [transfers, setTransfers] = useState([]);
   const [bookmarks, setBookmarks] = useState([]);
+  const [indexingStatus, setIndexingStatus] = useState({
+    isIndexing: false,
+    progress: { current: 0, total: 0, fileName: "" },
+    totalIndexed: 0,
+    isPaused: false,
+  });
 
   // Load bookmarks on component mount
   useEffect(() => {
-    loadBookmarks();
-    setupMenuListeners();
+    const initialize = async () => {
+      loadBookmarks();
+      setupMenuListeners();
+
+      // Note: Search engine initialization is now handled per-connection in FileExplorer
+      console.log(
+        "🔍 Search engine initialization moved to connection-specific context"
+      );
+    };
+
+    initialize();
 
     return () => {
       // Cleanup menu listeners
@@ -74,6 +89,13 @@ const FTPClient = () => {
     }
   };
 
+  // Indexing status update handler
+  const handleIndexingStatusChange = useCallback((newStatus) => {
+    setIndexingStatus(newStatus);
+  }, []);
+
+  // Note: Background indexing is now automatically triggered in FileExplorer when files are loaded
+
   const loadBookmarks = async () => {
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
@@ -96,15 +118,19 @@ const FTPClient = () => {
   // Check if current connection is already bookmarked
   const isCurrentConnectionBookmarked = () => {
     if (!connectionInfo || !bookmarks.length) return false;
-    
-    return bookmarks.some(bookmark => {
+
+    return bookmarks.some((bookmark) => {
       if (connectionInfo.type === "s3") {
-        return bookmark.bucket === connectionInfo.bucket && 
-               bookmark.region === connectionInfo.region;
+        return (
+          bookmark.bucket === connectionInfo.bucket &&
+          bookmark.region === connectionInfo.region
+        );
       } else {
-        return bookmark.host === connectionInfo.host && 
-               bookmark.port === connectionInfo.port && 
-               bookmark.username === connectionInfo.username;
+        return (
+          bookmark.host === connectionInfo.host &&
+          bookmark.port === connectionInfo.port &&
+          bookmark.username === connectionInfo.username
+        );
       }
     });
   };
@@ -187,6 +213,8 @@ const FTPClient = () => {
             if (dirResult.success) {
               setFiles(dirResult.data);
               setSelectedFiles([]);
+
+              // Background indexing will be triggered by useEffect when isConnected && files.length > 0
             }
           } catch (dirError) {
             console.warn("Failed to load initial directory:", dirError);
@@ -210,6 +238,16 @@ const FTPClient = () => {
   const handleDisconnect = async () => {
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
+        // Stop indexing process but preserve indexes
+        if (indexingStatus.isIndexing) {
+          console.log("🔍 Stopping indexing - now handled per-connection");
+          setIndexingStatus((prevStatus) => ({
+            ...prevStatus,
+            isIndexing: false,
+            isPaused: false,
+          }));
+        }
+
         await window.electronAPI.ftpDisconnect();
         setIsConnected(false);
         setConnectionInfo(null);
@@ -218,6 +256,8 @@ const FTPClient = () => {
         setCurrentPath("/");
         setSelectedFiles([]);
         toast.success("Disconnected from server");
+
+        console.log("🔍 Indexes preserved per-connection");
       }
     } catch (error) {
       toast.error(`Disconnect failed: ${error.message}`);
@@ -378,8 +418,26 @@ const FTPClient = () => {
   const handlePreview = async (file) => {
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
-        const remotePath =
-          currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
+        // Handle different path scenarios
+        let remotePath;
+
+        if (file.fullPath) {
+          // Search result with full path
+          remotePath = file.fullPath;
+        } else if (file.path) {
+          // File with explicit path
+          remotePath = file.path;
+        } else {
+          // Regular file in current directory
+          remotePath =
+            currentPath === "/"
+              ? `/${file.name}`
+              : `${currentPath}/${file.name}`;
+        }
+
+        console.log("Preview attempt for path:", remotePath);
+        console.log("File object:", file);
+        console.log("Current connection status:", { isConnected, currentPath });
 
         // Get file content for preview
         const result = await window.electronAPI.ftpPreview(remotePath);
@@ -423,7 +481,27 @@ const FTPClient = () => {
       }
     } catch (error) {
       console.error("Preview error:", error);
-      toast.error(`Preview failed: ${error.message}`);
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        file: file,
+        currentPath: currentPath,
+      });
+
+      // More specific error messages
+      let errorMessage = "Preview failed";
+      if (error.message.includes("S3")) {
+        errorMessage =
+          "FTP preview failed - incorrect backend service detected";
+      } else if (error.message.includes("Not connected")) {
+        errorMessage = "Preview failed - not connected to server";
+      } else if (error.message.includes("File not found")) {
+        errorMessage = "Preview failed - file not found";
+      } else {
+        errorMessage = `Preview failed: ${error.message}`;
+      }
+
+      toast.error(errorMessage);
     }
   };
 
@@ -478,13 +556,13 @@ const FTPClient = () => {
     <div className="h-screen bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex flex-col">
       {/* Header */}
       {/* Header */}
-      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm">
+      <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm electron-drag">
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2">
             <div className="flex items-center justify-center w-8 h-8">
-              <img 
-                src="/assets/icons/datafox-icon.svg" 
-                alt="DataFox" 
+              <img
+                src="/assets/icons/datafox-icon.svg"
+                alt="DataFox"
                 className="w-7 h-7"
               />
             </div>
@@ -492,7 +570,7 @@ const FTPClient = () => {
               DataFox
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 electron-no-drag">
             {isConnected ? (
               <>
                 {!isCurrentConnectionBookmarked() && (
@@ -569,8 +647,18 @@ const FTPClient = () => {
                     className="w-full p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200 flex items-center justify-center group"
                     title="New Connection"
                   >
-                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    <svg
+                      className="w-5 h-5 text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-blue-300"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 4v16m8-8H4"
+                      />
                     </svg>
                   </button>
                   <button
@@ -587,8 +675,18 @@ const FTPClient = () => {
                       className="w-full p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 flex items-center justify-center group"
                       title="Disconnect"
                     >
-                      <svg className="w-5 h-5 text-red-600 dark:text-red-400 group-hover:text-red-700 dark:group-hover:text-red-300" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        className="w-5 h-5 text-red-600 dark:text-red-400 group-hover:text-red-700 dark:group-hover:text-red-300"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                     </button>
                   )}
@@ -614,8 +712,18 @@ const FTPClient = () => {
                       onClick={handleDisconnect}
                       className="w-full px-3 py-2 rounded-lg bg-gradient-to-r from-slate-50 to-red-50 dark:from-slate-800 dark:to-red-900/30 text-red-700 dark:text-red-300 text-sm font-medium border border-red-100 dark:border-red-800/50 hover:border-red-200 dark:hover:border-red-700/70 hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 dark:hover:from-red-900/40 dark:hover:to-red-800/40 transition-all duration-200 backdrop-blur-sm transform hover:scale-[1.02] shadow-sm hover:shadow-md flex items-center gap-2"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                       Disconnect
                     </button>
@@ -646,9 +754,12 @@ const FTPClient = () => {
                     ) : (
                       <div className="space-y-1">
                         {bookmarks.map((bookmark) => {
-                          const isS3 = (bookmark.type || bookmark.protocol) === "s3";
-                          const isFTP = (bookmark.type || bookmark.protocol) === "ftp" || (bookmark.type || bookmark.protocol) === "sftp";
-                          
+                          const isS3 =
+                            (bookmark.type || bookmark.protocol) === "s3";
+                          const isFTP =
+                            (bookmark.type || bookmark.protocol) === "ftp" ||
+                            (bookmark.type || bookmark.protocol) === "sftp";
+
                           return (
                             <button
                               key={bookmark.id}
@@ -671,11 +782,21 @@ const FTPClient = () => {
                                   </div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                                     <span className="inline-flex items-center gap-1">
-                                      <span className={`w-1.5 h-1.5 rounded-full ${isS3 ? 'bg-orange-400' : isFTP ? 'bg-blue-400' : 'bg-gray-400'}`}></span>
+                                      <span
+                                        className={`w-1.5 h-1.5 rounded-full ${
+                                          isS3
+                                            ? "bg-orange-400"
+                                            : isFTP
+                                            ? "bg-blue-400"
+                                            : "bg-gray-400"
+                                        }`}
+                                      ></span>
                                       {isS3 ? "S3" : isFTP ? "FTP" : "Unknown"}
                                     </span>
                                     <span className="mx-1">•</span>
-                                    <span className="truncate">{bookmark.host || bookmark.endpoint}</span>
+                                    <span className="truncate">
+                                      {bookmark.host || bookmark.endpoint}
+                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -692,15 +813,20 @@ const FTPClient = () => {
                   <div className="flex flex-col space-y-2">
                     {/* Individual bookmark icons only - no duplicate manage button */}
                     {bookmarks.slice(0, 4).map((bookmark) => {
-                      const isS3 = (bookmark.type || bookmark.protocol) === "s3";
-                      const isFTP = (bookmark.type || bookmark.protocol) === "ftp" || (bookmark.type || bookmark.protocol) === "sftp";
-                      
+                      const isS3 =
+                        (bookmark.type || bookmark.protocol) === "s3";
+                      const isFTP =
+                        (bookmark.type || bookmark.protocol) === "ftp" ||
+                        (bookmark.type || bookmark.protocol) === "sftp";
+
                       return (
                         <button
                           key={bookmark.id}
                           onClick={() => handleBookmarkConnect(bookmark)}
                           className="w-full p-2 rounded-lg hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 dark:hover:from-blue-900/20 dark:hover:to-purple-900/20 transition-all duration-200 flex items-center justify-center border border-transparent hover:border-blue-200/50 dark:hover:border-blue-700/50"
-                          title={`${bookmark.name} (${isS3 ? 'S3' : isFTP ? 'FTP' : 'Server'})`}
+                          title={`${bookmark.name} (${
+                            isS3 ? "S3" : isFTP ? "FTP" : "Server"
+                          })`}
                         >
                           {isS3 ? (
                             <CloudIcon className="w-4 h-4 text-orange-500" />
@@ -712,7 +838,7 @@ const FTPClient = () => {
                         </button>
                       );
                     })}
-                    
+
                     {/* Show indicator if there are more bookmarks */}
                     {bookmarks.length > 4 && (
                       <button
@@ -739,6 +865,7 @@ const FTPClient = () => {
               currentPath={currentPath}
               loading={loading}
               selectedFiles={selectedFiles}
+              connectionInfo={connectionInfo}
               onFileSelect={setSelectedFiles}
               onFileDoubleClick={handleFileDoubleClick}
               onNavigateUp={handleNavigateUp}
@@ -749,6 +876,7 @@ const FTPClient = () => {
               onDelete={handleDelete}
               onUpload={handleUpload}
               onCreateFolder={handleCreateFolder}
+              onIndexingStatusChange={handleIndexingStatusChange}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm relative overflow-hidden">
@@ -767,9 +895,9 @@ const FTPClient = () => {
                   transition={{ duration: 0.5 }}
                   className="relative mb-6"
                 >
-                  <img 
-                    src="/assets/icons/datafox-icon.svg" 
-                    alt="DataFox" 
+                  <img
+                    src="/assets/icons/datafox-icon.svg"
+                    alt="DataFox"
                     className="w-32 h-32 mx-auto drop-shadow-lg"
                   />
                 </motion.div>
@@ -865,6 +993,7 @@ const FTPClient = () => {
         connectionInfo={connectionInfo}
         fileCount={files.length}
         selectedCount={selectedFiles.length}
+        indexingStatus={indexingStatus}
       />
 
       {/* Modals */}
