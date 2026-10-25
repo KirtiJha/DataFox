@@ -1,4 +1,5 @@
 const { EventEmitter } = require('events');
+const path = require('path');
 const ConnectionFactory = require('./managers/connectionFactory');
 
 class FTPManager extends EventEmitter {
@@ -98,54 +99,72 @@ class FTPManager extends EventEmitter {
     }
   }
 
-  async uploadFile(localPath, remotePath, onProgress) {
+  /**
+   * Run a transfer and emit 'progress' events shaped for the transfer queue:
+   * { id, type, fileName, transferred, total, progress, speed, status, error }.
+   * Pass { track: false } for internal transfers (e.g. the query cache).
+   */
+  async transfer(type, remotePath, localPath, onProgress, { track = true } = {}) {
+    if (!this.connectionManager || !this.isConnected) {
+      throw new Error('Not connected to server');
+    }
+
+    const started = Date.now();
+    const state = {
+      id: `${type}-${started}-${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      fileName: path.basename(type === 'upload' ? localPath : remotePath),
+      remotePath,
+      localPath,
+      transferred: 0,
+      total: 0,
+      progress: 0,
+      speed: 0,
+      status: 'transferring',
+    };
+    let lastEmit = 0;
+    const emit = (force = false) => {
+      if (!track) return;
+      const now = Date.now();
+      if (!force && now - lastEmit < 100) return; // at most ~10 updates/s
+      lastEmit = now;
+      this.emit('progress', { ...state });
+    };
+
+    const progressHandler = ({ transferred = 0, total = 0 }) => {
+      state.transferred = transferred;
+      state.total = total || state.total;
+      state.progress = state.total ? Math.min(100, (transferred / state.total) * 100) : 0;
+      state.speed = transferred / Math.max(0.001, (Date.now() - started) / 1000);
+      emit();
+      if (onProgress) onProgress({ transferred, total: state.total });
+    };
+
+    emit(true);
     try {
-      if (!this.connectionManager || !this.isConnected) {
-        throw new Error('Not connected to server');
-      }
-
-      // Wrap onProgress to also emit events
-      const progressHandler = (progress) => {
-        this.emit('progress', {
-          type: 'upload',
-          localPath,
-          remotePath,
-          ...progress
-        });
-        if (onProgress) onProgress(progress);
-      };
-
-      const result = await this.connectionManager.uploadFile(localPath, remotePath, progressHandler);
+      const method = type === 'upload' ? 'uploadFile' : 'downloadFile';
+      const args = type === 'upload' ? [localPath, remotePath] : [remotePath, localPath];
+      const result = await this.connectionManager[method](...args, track || onProgress ? progressHandler : undefined);
+      state.status = 'completed';
+      state.progress = 100;
+      state.transferred = state.total || state.transferred;
+      emit(true);
       return result;
     } catch (error) {
-      console.error('FTPManager: Upload error:', error);
+      state.status = 'failed';
+      state.error = error.message;
+      emit(true);
+      console.error(`FTPManager: ${type} error:`, error);
       throw error;
     }
   }
 
-  async downloadFile(remotePath, localPath, onProgress) {
-    try {
-      if (!this.connectionManager || !this.isConnected) {
-        throw new Error('Not connected to server');
-      }
+  uploadFile(localPath, remotePath, onProgress, options) {
+    return this.transfer('upload', remotePath, localPath, onProgress, options);
+  }
 
-      // Wrap onProgress to also emit events
-      const progressHandler = (progress) => {
-        this.emit('progress', {
-          type: 'download',
-          remotePath,
-          localPath,
-          ...progress
-        });
-        if (onProgress) onProgress(progress);
-      };
-
-      const result = await this.connectionManager.downloadFile(remotePath, localPath, progressHandler);
-      return result;
-    } catch (error) {
-      console.error('FTPManager: Download error:', error);
-      throw error;
-    }
+  downloadFile(remotePath, localPath, onProgress, options) {
+    return this.transfer('download', remotePath, localPath, onProgress, options);
   }
 
   async deleteFile(remotePath, isDirectory = false) {

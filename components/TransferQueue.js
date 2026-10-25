@@ -106,12 +106,14 @@ const TransferQueue = ({ transfers, onCancelTransfer, onClearCompleted }) => {
                     <span className="text-xs text-gray-500 dark:text-gray-400">
                       {transfer.speed && `${formatBytes(transfer.speed)}/s`}
                     </span>
-                    <button
-                      onClick={() => onCancelTransfer(transfer.id)}
-                      className="text-xs text-red-500 hover:text-red-700"
-                    >
-                      Cancel
-                    </button>
+                    {onCancelTransfer && (
+                      <button
+                        onClick={() => onCancelTransfer(transfer.id)}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               ))}

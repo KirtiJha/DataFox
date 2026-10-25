@@ -25,6 +25,7 @@ import BookmarkModal from "./BookmarkModal";
 import PreviewModal from "./PreviewModal";
 import FileExplorer, { cleanupSearchEngine } from "./FileExplorer";
 import TransferQueue from "./TransferQueue";
+import QueryWorkbench from "./QueryWorkbench";
 import StatusBar from "./StatusBar";
 
 const FTPClient = () => {
@@ -41,6 +42,7 @@ const FTPClient = () => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [transfers, setTransfers] = useState([]);
+  const [queryTarget, setQueryTarget] = useState(null);
   const [bookmarks, setBookmarks] = useState([]);
   const [indexingStatus, setIndexingStatus] = useState({
     isIndexing: false,
@@ -72,6 +74,7 @@ const FTPClient = () => {
         window.electronAPI.removeAllListeners("menu-upload");
         window.electronAPI.removeAllListeners("menu-download");
         window.electronAPI.removeAllListeners("bookmarks-changed");
+        window.electronAPI.removeAllListeners("transfer-progress");
       }
     };
   }, []);
@@ -94,6 +97,16 @@ const FTPClient = () => {
       window.electronAPI.onMenuUpload(() => menuActionsRef.current.upload());
       window.electronAPI.onMenuDownload(() => menuActionsRef.current.download());
       window.electronAPI.onBookmarksChanged(() => loadBookmarks());
+
+      window.electronAPI.onTransferProgress((update) => {
+        setTransfers((prev) => {
+          const index = prev.findIndex((t) => t.id === update.id);
+          if (index === -1) return [...prev, update].slice(-50);
+          const next = [...prev];
+          next[index] = update;
+          return next;
+        });
+      });
     }
   };
 
@@ -471,6 +484,14 @@ const FTPClient = () => {
   menuActionsRef.current = {
     upload: requireConnection(handleUpload),
     download: requireConnection(handleDownloadSelected),
+  };
+
+  const handleQuery = (file) => {
+    setQueryTarget({
+      path: getRemotePath(file),
+      name: file.name,
+      isDirectory: !!file.isDirectory,
+    });
   };
 
   const handlePreview = async (file) => {
@@ -919,6 +940,7 @@ const FTPClient = () => {
               onDelete={handleDelete}
               onUpload={handleUpload}
               onCreateFolder={handleCreateFolder}
+              onQuery={handleQuery}
               onIndexingStatusChange={handleIndexingStatusChange}
             />
           ) : (
@@ -1028,6 +1050,12 @@ const FTPClient = () => {
             </div>
           )}
         </div>
+        <TransferQueue
+          transfers={transfers}
+          onClearCompleted={() =>
+            setTransfers((prev) => prev.filter((t) => t.status === "transferring"))
+          }
+        />
       </div>
 
       {/* Status Bar */}
@@ -1040,6 +1068,15 @@ const FTPClient = () => {
       />
 
       {/* Modals */}
+      <AnimatePresence>
+        {queryTarget && (
+          <QueryWorkbench
+            key={queryTarget.path}
+            target={queryTarget}
+            onClose={() => setQueryTarget(null)}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {showConnectionModal && (
           <ConnectionModal

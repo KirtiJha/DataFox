@@ -11,6 +11,7 @@ const fs = require("fs-extra");
 const FTPManager = require("./ftpManager");
 const BookmarkManager = require("./bookmarkManager");
 const MainSemanticSearchEngine = require("./mainSemanticSearchEngine");
+const { QueryEngine } = require("./query/queryEngine");
 
 class ModernFTPClient {
   constructor() {
@@ -18,6 +19,7 @@ class ModernFTPClient {
     this.ftpManager = new FTPManager();
     this.bookmarkManager = new BookmarkManager();
     this.semanticSearchEngine = null;
+    this.queryEngine = null; // Created on first use; loads DuckDB
     this.isDev =
       process.env.NODE_ENV === "development" ||
       process.argv.includes("--dev") ||
@@ -31,6 +33,10 @@ class ModernFTPClient {
       this.createMainWindow();
       this.setupMenu();
       this.setupIPC();
+    });
+
+    app.on("before-quit", () => {
+      this.queryEngine?.closeAll();
     });
 
     app.on("window-all-closed", () => {
@@ -270,6 +276,12 @@ class ModernFTPClient {
   }
 
   setupIPC() {
+    const sendToRenderer = (channel, data) => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(channel, data);
+      }
+    };
+
     // FTP Operations
     ipcMain.handle("ftp-connect", async (event, connectionData) => {
       try {
@@ -288,6 +300,7 @@ class ModernFTPClient {
     });
 
     ipcMain.handle("ftp-disconnect", async (event) => {
+      this.queryEngine?.closeAll();
       return await this.ftpManager.disconnect();
     });
 
@@ -354,6 +367,50 @@ class ModernFTPClient {
     // Content indexing: download + extract in the main process, return only the index entry
     ipcMain.handle("ftp-extract-content", (event, remotePath, knownSize) =>
       this.respond(() => this.ftpManager.extractContent(remotePath, knownSize))
+    );
+
+    // SQL queries over remote files (DuckDB)
+    const queries = () => {
+      if (!this.queryEngine) {
+        this.queryEngine = new QueryEngine(this.ftpManager, app.getPath("userData"));
+        this.queryEngine.on("progress", (data) => sendToRenderer("query-progress", data));
+      }
+      return this.queryEngine;
+    };
+
+    ipcMain.handle("query-open", (event, target) =>
+      this.respond(() => queries().openSession(target))
+    );
+
+    ipcMain.handle("query-run", (event, sessionId, sql, limit) =>
+      this.respond(() => queries().run(sessionId, sql, limit))
+    );
+
+    ipcMain.handle("query-profile", (event, sessionId) =>
+      this.respond(() => queries().profile(sessionId))
+    );
+
+    ipcMain.handle("query-export", (event, sessionId, sql, format, suggestedName) =>
+      this.respond(async () => {
+        const result = await dialog.showSaveDialog(this.mainWindow, {
+          defaultPath: `${suggestedName || "query-result"}.${format}`,
+          filters: [{ name: format.toUpperCase(), extensions: [format] }],
+        });
+        if (result.canceled || !result.filePath) return { success: false, canceled: true };
+        return queries().exportResult(sessionId, sql, format, result.filePath);
+      })
+    );
+
+    ipcMain.handle("query-cancel", (event, sessionId) =>
+      this.respond(() => queries().cancel(sessionId))
+    );
+
+    ipcMain.handle("query-close", (event, sessionId) =>
+      this.respond(() => queries().closeSession(sessionId))
+    );
+
+    ipcMain.handle("query-clear-cache", () =>
+      this.respond(() => queries().clearCache())
     );
 
     // Bookmark Operations
@@ -609,12 +666,6 @@ class ModernFTPClient {
     });
 
     // Progress updates
-    const sendToRenderer = (channel, data) => {
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send(channel, data);
-      }
-    };
-
     this.ftpManager.on("progress", (data) => {
       sendToRenderer("transfer-progress", data);
     });

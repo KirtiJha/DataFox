@@ -70,6 +70,14 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 - **Result Highlighting** - Visual highlighting of search matches
 - **Pagination** - Efficient handling of large search result sets
 
+### 🧮 **SQL Over Remote Files**
+- **Query any Parquet, CSV or JSON file, or a whole folder of them, with SQL** (powered by [DuckDB](https://duckdb.org)). Click the database icon next to a file or folder.
+- The dataset appears as a view named `data`: `SELECT region, sum(amount) FROM data GROUP BY 1`
+- **Column profile**: null %, distinct count, min, max, mean and median for every column
+- **Export** full results to CSV, Parquet or JSON
+- Works on FTP, FTPS, SFTP and S3. Files are cached locally (up to 4 GB, least recently used evicted) and re-fetched when they change
+- Queries run in a sandbox that can only read the query cache: no access to other local files, the network, or extensions
+
 ### 🔖 **Smart Bookmark System**
 - **Visual Bookmarks** - Save connections with custom names and descriptions
 - **Quick Connect** - One-click access to frequently used servers
