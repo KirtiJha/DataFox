@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import {
@@ -69,6 +69,9 @@ const FTPClient = () => {
         window.electronAPI.removeAllListeners("menu-new-connection");
         window.electronAPI.removeAllListeners("menu-quick-connect");
         window.electronAPI.removeAllListeners("menu-manage-bookmarks");
+        window.electronAPI.removeAllListeners("menu-upload");
+        window.electronAPI.removeAllListeners("menu-download");
+        window.electronAPI.removeAllListeners("bookmarks-changed");
       }
     };
   }, []);
@@ -86,8 +89,15 @@ const FTPClient = () => {
       window.electronAPI.onMenuManageBookmarks(() => {
         setShowBookmarkModal(true);
       });
+
+      // Listeners are registered once, so they call through a ref to see current state.
+      window.electronAPI.onMenuUpload(() => menuActionsRef.current.upload());
+      window.electronAPI.onMenuDownload(() => menuActionsRef.current.download());
+      window.electronAPI.onBookmarksChanged(() => loadBookmarks());
     }
   };
+
+  const menuActionsRef = useRef({ upload: () => {}, download: () => {} });
 
   // Indexing status update handler
   const handleIndexingStatusChange = useCallback((newStatus) => {
@@ -420,6 +430,47 @@ const FTPClient = () => {
     } catch (error) {
       toast.error(`Download failed: ${error.message}`);
     }
+  };
+
+  const handleDownloadSelected = async () => {
+    const files = selectedFiles.filter((file) => !file.isDirectory);
+    if (files.length === 0) {
+      toast.error("Select one or more files to download");
+      return;
+    }
+    if (files.length === 1) {
+      await handleDownload(files[0]);
+      return;
+    }
+
+    const result = await window.electronAPI.dialogOpenDirectory({
+      title: "Download files to…",
+    });
+    if (result.canceled || result.filePaths.length === 0) return;
+
+    const sep = window.nodeAPI?.path.sep || "/";
+    let downloaded = 0;
+    for (const file of files) {
+      const downloadResult = await window.electronAPI.ftpDownload(
+        getRemotePath(file),
+        `${result.filePaths[0]}${sep}${file.name}`
+      );
+      if (downloadResult.success) downloaded++;
+      else toast.error(`Download of ${file.name} failed: ${downloadResult.error}`);
+    }
+    if (downloaded > 0) toast.success(`Downloaded ${downloaded} of ${files.length} files`);
+  };
+
+  const requireConnection = (action) => () => {
+    if (!isConnected) {
+      toast.error("Connect to a server first");
+      return;
+    }
+    action();
+  };
+  menuActionsRef.current = {
+    upload: requireConnection(handleUpload),
+    download: requireConnection(handleDownloadSelected),
   };
 
   const handlePreview = async (file) => {

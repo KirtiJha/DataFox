@@ -90,7 +90,7 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 
 ### 🛡️ **Security & Privacy**
 - **Context Isolation** - Secure Electron architecture
-- **Encrypted Storage** - System keychain integration
+- **Encrypted Storage** - Bookmark passwords encrypted with the OS keychain (Electron `safeStorage`)
 - **No Remote Code** - Eliminates security vulnerabilities
 - **Secure IPC** - Safe communication between processes
 
@@ -232,11 +232,11 @@ npm run dist:linux  # Linux packages
 #### Connection Management
 - `Cmd+N` / `Ctrl+N` - New Connection
 - `Cmd+K` / `Ctrl+K` - Quick Connect
-- `Cmd+B` / `Ctrl+B` - Manage Bookmarks
-- `Cmd+D` / `Ctrl+D` - Disconnect
+- `Cmd+Shift+B` / `Ctrl+Shift+B` - Manage Bookmarks
 
 #### File Operations
 - `Cmd+U` / `Ctrl+U` - Upload Files
+- `Cmd+D` / `Ctrl+D` - Download Selected Files
 - `Cmd+Shift+N` / `Ctrl+Shift+N` - Create Folder
 - `Space` - Preview Selected File
 - `F5` - Refresh Directory

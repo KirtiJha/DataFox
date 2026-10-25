@@ -97,6 +97,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onMenuManageBookmarks: (callback) => {
     ipcRenderer.on("menu-manage-bookmarks", callback);
   },
+  onMenuUpload: (callback) => {
+    ipcRenderer.on("menu-upload", callback);
+  },
+  onMenuDownload: (callback) => {
+    ipcRenderer.on("menu-download", callback);
+  },
+  onBookmarksChanged: (callback) => {
+    ipcRenderer.on("bookmarks-changed", callback);
+  },
 
   // Remove listeners
   removeAllListeners: (channel) => {

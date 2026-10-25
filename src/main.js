@@ -97,6 +97,13 @@ class ModernFTPClient {
               this.mainWindow.webContents.send("menu-quick-connect");
             },
           },
+          {
+            label: "Manage Bookmarks",
+            accelerator: "CmdOrCtrl+Shift+B",
+            click: () => {
+              this.mainWindow.webContents.send("menu-manage-bookmarks");
+            },
+          },
           { type: "separator" },
           {
             label: "Import Bookmarks",
@@ -106,10 +113,7 @@ class ModernFTPClient {
                 filters: [{ name: "JSON Files", extensions: ["json"] }],
               });
               if (!result.canceled) {
-                this.mainWindow.webContents.send(
-                  "import-bookmarks",
-                  result.filePaths[0]
-                );
+                await this.importBookmarks(result.filePaths[0]);
               }
             },
           },
@@ -117,13 +121,11 @@ class ModernFTPClient {
             label: "Export Bookmarks",
             click: async () => {
               const result = await dialog.showSaveDialog(this.mainWindow, {
+                defaultPath: "datafox-bookmarks.json",
                 filters: [{ name: "JSON Files", extensions: ["json"] }],
               });
-              if (!result.canceled) {
-                this.mainWindow.webContents.send(
-                  "export-bookmarks",
-                  result.filePath
-                );
+              if (!result.canceled && result.filePath) {
+                await this.exportBookmarks(result.filePath);
               }
             },
           },
@@ -174,14 +176,6 @@ class ModernFTPClient {
               this.mainWindow.webContents.send("menu-download");
             },
           },
-          { type: "separator" },
-          {
-            label: "Sync Folders",
-            accelerator: "CmdOrCtrl+S",
-            click: () => {
-              this.mainWindow.webContents.send("menu-sync");
-            },
-          },
         ],
       },
       {
@@ -194,7 +188,14 @@ class ModernFTPClient {
           {
             label: "About",
             click: () => {
-              this.mainWindow.webContents.send("menu-about");
+              dialog.showMessageBox(this.mainWindow, {
+                type: "info",
+                title: "About DataFox",
+                message: `DataFox ${app.getVersion()}`,
+                detail:
+                  "A modern client for FTP, FTPS, SFTP and S3 with content search.\n\n" +
+                  `Electron ${process.versions.electron} · Chrome ${process.versions.chrome} · Node ${process.versions.node}`,
+              });
             },
           },
           {
@@ -211,6 +212,36 @@ class ModernFTPClient {
 
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
+  }
+
+  async importBookmarks(filePath) {
+    const result = await this.bookmarkManager.importBookmarks(filePath);
+    if (result.success) {
+      this.mainWindow.webContents.send("bookmarks-changed");
+      await dialog.showMessageBox(this.mainWindow, {
+        type: result.errors ? "warning" : "info",
+        message: `Imported ${result.importedCount} bookmark${result.importedCount === 1 ? "" : "s"}`,
+        detail: [
+          "Passwords are not included in exported files; enter them when you first connect.",
+          ...(result.errors || []),
+        ].join("\n"),
+      });
+    } else {
+      dialog.showErrorBox("Import failed", result.error);
+    }
+  }
+
+  async exportBookmarks(filePath) {
+    const result = await this.bookmarkManager.exportBookmarks(filePath);
+    if (result.success) {
+      await dialog.showMessageBox(this.mainWindow, {
+        type: "info",
+        message: `Exported ${result.count} bookmark${result.count === 1 ? "" : "s"}`,
+        detail: "Passwords and keys were left out of the file.",
+      });
+    } else {
+      dialog.showErrorBox("Export failed", result.error);
+    }
   }
 
   // Index/cache files live directly in userData; reject anything that could
