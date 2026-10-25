@@ -20,6 +20,7 @@ import {
   MagnifyingGlassIcon,
   FunnelIcon,
   DocumentArrowDownIcon,
+  CircleStackIcon,
 } from "@heroicons/react/24/outline";
 import SearchBar from "./SearchBar";
 import FilterPanel from "./FilterPanel";
@@ -69,6 +70,7 @@ const FileExplorer = ({
   onDelete,
   onUpload,
   onCreateFolder,
+  onQuery,
   onIndexingStatusChange, // New prop to communicate indexing status back to parent
 }) => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -660,6 +662,11 @@ const FileExplorer = ({
   };
 
   // Helper function to check if file can be previewed
+  const QUERYABLE_EXTENSIONS = ["parquet", "csv", "tsv", "json", "jsonl", "ndjson"];
+  const canQueryFile = (file) =>
+    file.isDirectory ||
+    QUERYABLE_EXTENSIONS.includes(file.name.split(".").pop()?.toLowerCase());
+
   const canPreviewFile = (file) => {
     if (file.isDirectory) return false;
     const extension = file.name.split(".").pop()?.toLowerCase();
@@ -925,7 +932,7 @@ const FileExplorer = ({
       <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
         <div className="grid grid-cols-12 gap-4 px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           <button
-            className="col-span-6 text-left hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
+            className="col-span-5 text-left hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
             onClick={() => handleSort("name")}
           >
             Name
@@ -969,7 +976,7 @@ const FileExplorer = ({
               </span>
             )}
           </button>
-          <div className="col-span-1 text-center">Actions</div>
+          <div className="col-span-2 text-right pr-1">Actions</div>
         </div>
       </div>
 
@@ -1001,7 +1008,7 @@ const FileExplorer = ({
                 onDoubleClick={() => onFileDoubleClick(file)}
                 onContextMenu={(e) => handleFileContextMenu(file, e)}
               >
-                <div className="col-span-6 flex items-center gap-3 min-w-0">
+                <div className="col-span-5 flex items-center gap-3 min-w-0">
                   {getFileIcon(file)}
                   <span className="truncate text-sm text-gray-900 dark:text-gray-100">
                     {file.name}
@@ -1015,8 +1022,20 @@ const FileExplorer = ({
                 <div className="col-span-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
                   {formatDate(getModifiedDate(file))}
                 </div>
-                <div className="col-span-1 flex items-center justify-center">
+                <div className="col-span-2 flex items-center justify-end">
                   <div className="flex items-center gap-1">
+                    {onQuery && canQueryFile(file) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onQuery(file);
+                        }}
+                        className="p-1 hover:bg-purple-100 dark:hover:bg-purple-900 rounded transition-colors"
+                        title={file.isDirectory ? "Query folder with SQL" : "Query with SQL"}
+                      >
+                        <CircleStackIcon className="w-4 h-4 text-purple-500" />
+                      </button>
+                    )}
                     {!file.isDirectory && canPreviewFile(file) && (
                       <button
                         onClick={(e) => {

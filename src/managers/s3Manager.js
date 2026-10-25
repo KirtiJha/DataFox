@@ -362,7 +362,7 @@ class S3ConnectionManager extends BaseConnectionManager {
     }
   }
 
-  async uploadFile(localPath, remotePath) {
+  async uploadFile(localPath, remotePath, onProgress) {
     try {
       if (!this.isConnected || !this.s3Client) {
         throw new Error("Not connected to S3");
@@ -386,12 +386,11 @@ class S3ConnectionManager extends BaseConnectionManager {
         },
       });
 
-      // Track upload progress
-      upload.on("httpUploadProgress", (progress) => {
-        console.log(
-          `Upload progress: ${progress.loaded}/${progress.total} bytes`
-        );
-      });
+      if (onProgress) {
+        upload.on("httpUploadProgress", (progress) => {
+          onProgress({ transferred: progress.loaded || 0, total: progress.total || 0 });
+        });
+      }
 
       const result = await upload.done();
 
@@ -408,7 +407,7 @@ class S3ConnectionManager extends BaseConnectionManager {
     }
   }
 
-  async downloadFile(remotePath, localPath) {
+  async downloadFile(remotePath, localPath, onProgress) {
     try {
       if (!this.isConnected || !this.s3Client) {
         throw new Error("Not connected to S3");
@@ -427,7 +426,20 @@ class S3ConnectionManager extends BaseConnectionManager {
       const response = await this.s3Client.send(command);
       const writeStream = fs.createWriteStream(localPath);
 
+      if (onProgress) {
+        const total = response.ContentLength || 0;
+        let transferred = 0;
+        response.Body.on("data", (chunk) => {
+          transferred += chunk.length;
+          onProgress({ transferred, total });
+        });
+      }
+
       return new Promise((resolve, reject) => {
+        response.Body.on("error", (error) => {
+          writeStream.destroy();
+          reject(new Error(`S3 download failed: ${error.message}`));
+        });
         response.Body.pipe(writeStream)
           .on("error", (error) => {
             console.error("S3 download error:", error);

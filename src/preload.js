@@ -22,6 +22,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ftpExtractContent: (remotePath, knownSize) =>
     ipcRenderer.invoke("ftp-extract-content", remotePath, knownSize),
 
+  // SQL queries over remote files
+  queryOpen: (target) => ipcRenderer.invoke("query-open", target),
+  queryRun: (sessionId, sql, limit) =>
+    ipcRenderer.invoke("query-run", sessionId, sql, limit),
+  queryProfile: (sessionId) => ipcRenderer.invoke("query-profile", sessionId),
+  queryExport: (sessionId, sql, format, suggestedName) =>
+    ipcRenderer.invoke("query-export", sessionId, sql, format, suggestedName),
+  queryCancel: (sessionId) => ipcRenderer.invoke("query-cancel", sessionId),
+  queryClose: (sessionId) => ipcRenderer.invoke("query-close", sessionId),
+  queryClearCache: () => ipcRenderer.invoke("query-clear-cache"),
+  onQueryProgress: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on("query-progress", listener);
+    return () => ipcRenderer.removeListener("query-progress", listener);
+  },
+
   // Bookmark Operations
   bookmarksGetAll: () => ipcRenderer.invoke("bookmarks-get-all"),
   bookmarksAdd: (bookmark) => ipcRenderer.invoke("bookmarks-save", bookmark),

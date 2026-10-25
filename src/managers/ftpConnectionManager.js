@@ -184,12 +184,52 @@ class FTPConnectionManager extends BaseConnectionManager {
     }
   }
 
-  async uploadFile(localPath, remotePath) {
+  /**
+   * Run a basic-ftp transfer with byte progress. trackProgress is per client,
+   * which is safe because FTP operations are serialized.
+   */
+  async ftpTransfer(client, total, onProgress, transfer) {
+    if (onProgress) {
+      client.trackProgress((info) => onProgress({ transferred: info.bytes, total }));
+    }
+    try {
+      return await transfer();
+    } finally {
+      client.trackProgress();
+    }
+  }
+
+  /**
+   * SFTP transfers use fastGet/fastPut for progress reporting; some servers
+   * reject their parallel requests, so fall back to get/put without progress.
+   */
+  async sftpTransfer(fast, plain, onProgress) {
+    if (!onProgress) return this.run(plain);
+    try {
+      return await this.run((client) =>
+        fast(client, {
+          step: (transferred, chunk, total) => onProgress({ transferred, total }),
+        })
+      );
+    } catch (error) {
+      console.warn('SFTP fast transfer failed, retrying without progress:', error.message);
+      return this.run(plain);
+    }
+  }
+
+  async uploadFile(localPath, remotePath, onProgress) {
     try {
       if (this.protocol === 'sftp') {
-        await this.run((client) => client.put(localPath, remotePath));
+        await this.sftpTransfer(
+          (client, options) => client.fastPut(localPath, remotePath, options),
+          (client) => client.put(localPath, remotePath),
+          onProgress
+        );
       } else {
-        await this.run((client) => client.uploadFrom(localPath, remotePath));
+        const total = fs.statSync(localPath).size;
+        await this.run((client) =>
+          this.ftpTransfer(client, total, onProgress, () => client.uploadFrom(localPath, remotePath))
+        );
       }
 
       console.log('File uploaded successfully:', remotePath);
@@ -201,12 +241,19 @@ class FTPConnectionManager extends BaseConnectionManager {
     }
   }
 
-  async downloadFile(remotePath, localPath) {
+  async downloadFile(remotePath, localPath, onProgress) {
     try {
       if (this.protocol === 'sftp') {
-        await this.run((client) => client.get(remotePath, localPath));
+        await this.sftpTransfer(
+          (client, options) => client.fastGet(remotePath, localPath, options),
+          (client) => client.get(remotePath, localPath),
+          onProgress
+        );
       } else {
-        await this.run((client) => client.downloadTo(localPath, remotePath));
+        await this.run(async (client) => {
+          const total = onProgress ? await client.size(remotePath).catch(() => 0) : 0;
+          return this.ftpTransfer(client, total, onProgress, () => client.downloadTo(localPath, remotePath));
+        });
       }
 
       console.log('File downloaded successfully:', localPath);
