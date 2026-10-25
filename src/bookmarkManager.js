@@ -1,11 +1,11 @@
 const fs = require('fs-extra');
 const path = require('path');
-const { app, safeStorage } = require('electron');
+const { app } = require('electron');
+const { canEncrypt, isEncrypted, encryptSecret, decryptSecret } = require('./secrets');
 const crypto = require('crypto');
 
 // Fields encrypted at rest with the OS keychain (Keychain, DPAPI, libsecret/kwallet).
 const SECRET_FIELDS = ['password', 'passphrase', 'secretKey'];
-const ENCRYPTED_PREFIX = 'safe:v1:';
 
 class BookmarkManager {
     constructor() {
@@ -18,26 +18,6 @@ class BookmarkManager {
         this.ready = app.whenReady().then(() => this.loadBookmarks());
     }
 
-    canEncrypt() {
-        return safeStorage.isEncryptionAvailable();
-    }
-
-    encryptSecret(value) {
-        if (!value || !this.canEncrypt()) return value;
-        return ENCRYPTED_PREFIX + safeStorage.encryptString(value).toString('base64');
-    }
-
-    decryptSecret(value) {
-        if (typeof value !== 'string' || !value.startsWith(ENCRYPTED_PREFIX)) return value;
-        try {
-            return safeStorage.decryptString(Buffer.from(value.slice(ENCRYPTED_PREFIX.length), 'base64'));
-        } catch (error) {
-            // E.g. the file was copied from another machine or user account.
-            console.error('Could not decrypt a saved bookmark secret; it must be re-entered.');
-            return '';
-        }
-    }
-
     mapSecrets(bookmark, transform) {
         const result = { ...bookmark };
         for (const field of SECRET_FIELDS) {
@@ -48,14 +28,14 @@ class BookmarkManager {
 
     decryptBookmark(stored) {
         return this.mapSecrets(stored, (value, field) => {
-            const decrypted = this.decryptSecret(value);
+            const decrypted = decryptSecret(value);
             if (!decrypted && value) this.undecryptable.set(`${stored.id}:${field}`, value);
             return decrypted;
         });
     }
 
     encryptBookmark(bookmark) {
-        const stored = this.mapSecrets(bookmark, v => this.encryptSecret(v));
+        const stored = this.mapSecrets(bookmark, v => encryptSecret(v));
         for (const field of SECRET_FIELDS) {
             const original = this.undecryptable.get(`${bookmark.id}:${field}`);
             if (original && !bookmark[field]) stored[field] = original;
@@ -73,8 +53,8 @@ class BookmarkManager {
 
                 // Encrypt secrets saved in plain text by earlier versions.
                 const hasPlaintext = stored.some(b => SECRET_FIELDS.some(f =>
-                    b[f] && !String(b[f]).startsWith(ENCRYPTED_PREFIX)));
-                if (hasPlaintext && this.canEncrypt()) {
+                    b[f] && !isEncrypted(b[f])));
+                if (hasPlaintext && canEncrypt()) {
                     await this.saveBookmarks();
                 }
             } else {
@@ -82,7 +62,7 @@ class BookmarkManager {
                 await this.saveBookmarks();
             }
 
-            if (!this.canEncrypt()) {
+            if (!canEncrypt()) {
                 console.warn('OS encryption is unavailable; bookmark passwords are stored unencrypted.');
             }
         } catch (error) {
@@ -276,7 +256,7 @@ class BookmarkManager {
                     const bookmark = {
                         // Encrypted values from another machine can't be decrypted here.
                         ...this.mapSecrets(bookmarkData, v =>
-                            String(v).startsWith(ENCRYPTED_PREFIX) ? '' : v),
+                            isEncrypted(v) ? '' : v),
                         id: this.generateId(),
                         importedAt: new Date().toISOString(),
                         lastConnected: null,

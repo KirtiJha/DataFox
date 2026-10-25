@@ -26,33 +26,10 @@ import SearchBar from "./SearchBar";
 import FilterPanel from "./FilterPanel";
 import QuickFilters from "./QuickFilters";
 import SearchResults from "./SearchResults";
-import { SearchEngine } from "../utils/searchEngine";
-
-// Connection-specific search engine manager
-const connectionSearchEngines = new Map();
-
-// Cleanup function to remove old search engines (can be called when connections are closed)
-export const cleanupSearchEngine = (connectionInfo) => {
-  if (!connectionInfo) return;
-
-  const connectionId =
-    connectionInfo.type === "s3"
-      ? `s3-${connectionInfo.bucket}-${connectionInfo.region}`.replace(
-          /[^a-zA-Z0-9\-_]/g,
-          "-"
-        )
-      : `ftp-${connectionInfo.host}-${connectionInfo.port}-${connectionInfo.username}`.replace(
-          /[^a-zA-Z0-9\-_]/g,
-          "-"
-        );
-
-  const engine = connectionSearchEngines.get(connectionId);
-  if (engine) {
-    // The saved index stays on disk and is reloaded on the next connection.
-    engine.stopBackgroundIndexing();
-    connectionSearchEngines.delete(connectionId);
-  }
-};
+import {
+  connectionIdFor,
+  getSearchEngine as getEngineForConnection,
+} from "../utils/searchEngineRegistry";
 
 const FileExplorer = ({
   files,
@@ -112,51 +89,22 @@ const FileExplorer = ({
   const searchTimeoutRef = useRef(null);
   const isSearchingRef = useRef(false);
 
-  // Create stable connection ID that only changes when connection details change
-  const connectionId = useMemo(() => {
-    if (!connectionInfo) return null;
+  // Stable connection ID that only changes when connection details change
+  const connectionId = useMemo(
+    () => connectionIdFor(connectionInfo),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      connectionInfo?.type,
+      connectionInfo?.bucket,
+      connectionInfo?.region,
+      connectionInfo?.host,
+      connectionInfo?.port,
+      connectionInfo?.username,
+    ]
+  );
 
-    return connectionInfo.type === "s3"
-      ? `s3-${connectionInfo.bucket}-${connectionInfo.region}`.replace(
-          /[^a-zA-Z0-9\-_]/g,
-          "-"
-        )
-      : `ftp-${connectionInfo.host}-${connectionInfo.port}-${connectionInfo.username}`.replace(
-          /[^a-zA-Z0-9\-_]/g,
-          "-"
-        );
-  }, [
-    connectionInfo?.type,
-    connectionInfo?.bucket,
-    connectionInfo?.region,
-    connectionInfo?.host,
-    connectionInfo?.port,
-    connectionInfo?.username,
-  ]);
-
-  // Get or create connection-specific search engine
-  const getSearchEngine = useCallback(() => {
-    if (!connectionId) {
-      console.warn("No connection info available for search engine");
-      return null;
-    }
-
-    // Get existing search engine or create new one
-    if (!connectionSearchEngines.has(connectionId)) {
-      console.log(
-        `🔍 Creating new search engine for connection: ${connectionId}`
-      );
-      const newEngine = new SearchEngine(connectionId, {
-        protocol: connectionInfo?.type,
-      });
-      connectionSearchEngines.set(connectionId, newEngine);
-
-      // initializeStorage always marks the engine ready, even if loading fails.
-      newEngine.initializeStorage();
-    }
-
-    return connectionSearchEngines.get(connectionId);
-  }, [connectionId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const getSearchEngine = useCallback(() => getEngineForConnection(connectionInfo), [connectionId]);
 
   // Load saved state from localStorage
   useEffect(() => {

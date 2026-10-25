@@ -94,8 +94,10 @@ const QueryWorkbench = ({ target, onClose }) => {
       }
       sessionRef.current = response.data;
       setSession(response.data);
-      setSql(response.data.defaultQuery);
-      runQuery(response.data.defaultQuery, response.data);
+      // Opened from the assistant: start with the query it ran.
+      const initialSql = target.sql || response.data.defaultQuery;
+      setSql(initialSql);
+      runQuery(initialSql, response.data);
     });
 
     return () => {

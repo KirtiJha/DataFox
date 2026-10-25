@@ -12,6 +12,8 @@ const FTPManager = require("./ftpManager");
 const BookmarkManager = require("./bookmarkManager");
 const MainSemanticSearchEngine = require("./mainSemanticSearchEngine");
 const { QueryEngine } = require("./query/queryEngine");
+const { AISettings } = require("./ai/aiSettings");
+const { createConversation, listModels, AbortedError, RefusalError } = require("./ai/providers");
 
 class ModernFTPClient {
   constructor() {
@@ -20,6 +22,8 @@ class ModernFTPClient {
     this.bookmarkManager = new BookmarkManager();
     this.semanticSearchEngine = null;
     this.queryEngine = null; // Created on first use; loads DuckDB
+    this.aiSettings = new AISettings();
+    this.aiChats = new Map(); // chatId -> { conversation, controller }
     this.isDev =
       process.env.NODE_ENV === "development" ||
       process.argv.includes("--dev") ||
@@ -75,6 +79,12 @@ class ModernFTPClient {
       this.mainWindow.loadFile(path.join(__dirname, "../out/index.html"));
     }
 
+    // Open web links (e.g. "Get an API key") in the system browser, never in-app.
+    this.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:\/\//.test(url)) shell.openExternal(url);
+      return { action: "deny" };
+    });
+
     this.mainWindow.once("ready-to-show", () => {
       this.mainWindow.show();
     });
@@ -101,6 +111,13 @@ class ModernFTPClient {
             accelerator: "CmdOrCtrl+K",
             click: () => {
               this.mainWindow.webContents.send("menu-quick-connect");
+            },
+          },
+          {
+            label: "AI Settings…",
+            accelerator: "CmdOrCtrl+,",
+            click: () => {
+              this.mainWindow.webContents.send("menu-ai-settings");
             },
           },
           {
@@ -154,6 +171,14 @@ class ModernFTPClient {
       {
         label: "View",
         submenu: [
+          {
+            label: "Ask AI",
+            accelerator: "CmdOrCtrl+J",
+            click: () => {
+              this.mainWindow.webContents.send("menu-toggle-assistant");
+            },
+          },
+          { type: "separator" },
           { role: "reload" },
           { role: "forceReload" },
           { role: "toggleDevTools" },
@@ -411,6 +436,85 @@ class ModernFTPClient {
 
     ipcMain.handle("query-clear-cache", () =>
       this.respond(() => queries().clearCache())
+    );
+
+    // AI assistant: provider settings and chat turns. API keys stay in this process.
+    ipcMain.handle("ai-settings-get", () =>
+      this.respond(() => this.aiSettings.getPublic())
+    );
+
+    ipcMain.handle("ai-settings-save", (event, settings) =>
+      this.respond(() => this.aiSettings.save(settings))
+    );
+
+    ipcMain.handle("ai-set-connection-enabled", (event, connectionId, enabled) =>
+      this.respond(() => this.aiSettings.setConnectionEnabled(connectionId, enabled))
+    );
+
+    ipcMain.handle("ai-list-models", (event, draftProvider) =>
+      this.respond(async () => listModels(await this.aiSettings.providerForRequest(draftProvider)))
+    );
+
+    ipcMain.handle("ai-test", (event, draftProvider, modelId) =>
+      this.respond(async () => {
+        const provider = await this.aiSettings.providerForRequest(draftProvider);
+        const model = (provider.models || []).find((m) => m.id === modelId) || { id: modelId };
+        const conversation = createConversation({
+          provider,
+          model,
+          system: "You are a connection test.",
+          tools: [],
+        });
+        const turn = await conversation.send({ text: "Reply with exactly: OK" });
+        return { reply: turn.text.trim().slice(0, 200), servedBy: turn.servedBy };
+      })
+    );
+
+    ipcMain.handle("ai-chat-start", (event, modelRef, system, tools) =>
+      this.respond(async () => {
+        const { provider, model } = await this.aiSettings.resolve(modelRef);
+        const chatId = require("crypto").randomUUID();
+        this.aiChats.set(chatId, {
+          conversation: createConversation({ provider, model, system, tools }),
+          controller: null,
+        });
+        return { chatId, providerName: provider.name, modelId: model.id };
+      })
+    );
+
+    ipcMain.handle("ai-chat-send", async (event, chatId, input) => {
+      const chat = this.aiChats.get(chatId);
+      if (!chat) return { success: false, error: "This chat has ended. Start a new one." };
+      chat.controller = new AbortController();
+      try {
+        const turn = await chat.conversation.send(input, {
+          signal: chat.controller.signal,
+          onText: (text) => sendToRenderer("ai-delta", { chatId, text }),
+        });
+        return { success: true, data: turn };
+      } catch (error) {
+        // A refusal leaves a turn the model wouldn't finish; end the chat. Other
+        // failures (rate limits, network) leave valid history, so the user can retry.
+        const ended = error instanceof RefusalError;
+        if (ended) this.aiChats.delete(chatId);
+        return {
+          success: false,
+          error: error.message,
+          aborted: error instanceof AbortedError,
+          refusal: error instanceof RefusalError,
+          ended,
+        };
+      } finally {
+        chat.controller = null;
+      }
+    });
+
+    ipcMain.handle("ai-chat-stop", (event, chatId) =>
+      this.respond(() => this.aiChats.get(chatId)?.controller?.abort())
+    );
+
+    ipcMain.handle("ai-chat-close", (event, chatId) =>
+      this.respond(() => this.aiChats.delete(chatId))
     );
 
     // Bookmark Operations

@@ -38,6 +38,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("query-progress", listener);
   },
 
+  // AI assistant
+  aiSettingsGet: () => ipcRenderer.invoke("ai-settings-get"),
+  aiSettingsSave: (settings) => ipcRenderer.invoke("ai-settings-save", settings),
+  aiSetConnectionEnabled: (connectionId, enabled) =>
+    ipcRenderer.invoke("ai-set-connection-enabled", connectionId, enabled),
+  aiListModels: (draftProvider) => ipcRenderer.invoke("ai-list-models", draftProvider),
+  aiTest: (draftProvider, modelId) => ipcRenderer.invoke("ai-test", draftProvider, modelId),
+  aiChatStart: (modelRef, system, tools) =>
+    ipcRenderer.invoke("ai-chat-start", modelRef, system, tools),
+  aiChatSend: (chatId, input) => ipcRenderer.invoke("ai-chat-send", chatId, input),
+  aiChatStop: (chatId) => ipcRenderer.invoke("ai-chat-stop", chatId),
+  aiChatClose: (chatId) => ipcRenderer.invoke("ai-chat-close", chatId),
+  onAiDelta: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on("ai-delta", listener);
+    return () => ipcRenderer.removeListener("ai-delta", listener);
+  },
+
   // Bookmark Operations
   bookmarksGetAll: () => ipcRenderer.invoke("bookmarks-get-all"),
   bookmarksAdd: (bookmark) => ipcRenderer.invoke("bookmarks-save", bookmark),

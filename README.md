@@ -78,6 +78,12 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 - Works on FTP, FTPS, SFTP and S3. Files are cached locally (up to 4 GB, least recently used evicted) and re-fetched when they change
 - Queries run in a sandbox that can only read the query cache: no access to other local files, the network, or extensions
 
+### ✨ **Ask Your Data (AI Assistant)**
+- **Ask questions in plain English**, e.g. "Which files have an email column?" or "What was revenue by region last month?". The assistant finds the right files, reads their schema, writes and runs SQL, and explains the answer with the result tables.
+- **Bring your own model**: Anthropic (Claude), OpenAI, Google Gemini, OpenRouter, Groq, local Ollama or LM Studio, or any OpenAI-compatible endpoint. Configure several providers and models under **File → AI Settings** (`Cmd/Ctrl+,`) and switch per chat.
+- **Private by default**: off until you allow it per connection. Only file names, column schemas and query results (up to 50 rows per query) are sent to your provider, never whole files. API keys are encrypted with your OS keychain.
+- Every query the assistant runs is shown and can be opened in the SQL workbench. Open the panel with **Ask AI** or `Cmd/Ctrl+J`.
+
 ### 🔖 **Smart Bookmark System**
 - **Visual Bookmarks** - Save connections with custom names and descriptions
 - **Quick Connect** - One-click access to frequently used servers
@@ -277,6 +283,11 @@ datafox/
 │   ├── ftpManager.js             # Facade over the active connection
 │   ├── bookmarkManager.js        # Bookmark storage
 │   ├── mainSemanticSearchEngine.js # Optional embedding-based search
+│   ├── secrets.js                # OS-keychain encryption for stored secrets
+│   ├── ai/
+│   │   ├── aiSettings.js         # Providers, models, per-connection opt-in
+│   │   └── providers.js          # Anthropic SDK + OpenAI-compatible adapters
+│   ├── query/queryEngine.js      # Sandboxed DuckDB over cached remote files
 │   └── managers/
 │       ├── connectionFactory.js  # Picks a manager by protocol
 │       ├── baseManager.js        # Shared interface + preview/extract
@@ -294,6 +305,8 @@ datafox/
 │   └── StatusBar.js              # Status display
 ├── 🔍 utils/
 │   ├── searchEngine.js           # Per-connection search engine (public API)
+│   ├── searchEngineRegistry.js   # One search engine per connection
+│   ├── assistant/dataAgent.js    # Assistant tools and tool-calling loop
 │   ├── BrowserSemanticSearchEngine.js # Renderer side of semantic search
 │   └── search/
 │       ├── fileTypes.js          # Extension/type/path helpers

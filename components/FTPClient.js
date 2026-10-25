@@ -19,13 +19,17 @@ import {
   ComputerDesktopIcon,
   BoltIcon,
   RocketLaunchIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import ConnectionModal from "./ConnectionModal";
 import BookmarkModal from "./BookmarkModal";
 import PreviewModal from "./PreviewModal";
-import FileExplorer, { cleanupSearchEngine } from "./FileExplorer";
+import FileExplorer from "./FileExplorer";
+import { cleanupSearchEngine } from "../utils/searchEngineRegistry";
 import TransferQueue from "./TransferQueue";
 import QueryWorkbench from "./QueryWorkbench";
+import AssistantPanel from "./AssistantPanel";
+import AISettingsModal from "./AISettingsModal";
 import StatusBar from "./StatusBar";
 
 const FTPClient = () => {
@@ -43,6 +47,9 @@ const FTPClient = () => {
   const [loading, setLoading] = useState(false);
   const [transfers, setTransfers] = useState([]);
   const [queryTarget, setQueryTarget] = useState(null);
+  const [showAssistant, setShowAssistant] = useState(false);
+  const [showAISettings, setShowAISettings] = useState(false);
+  const [aiSettingsVersion, setAiSettingsVersion] = useState(0);
   const [bookmarks, setBookmarks] = useState([]);
   const [indexingStatus, setIndexingStatus] = useState({
     isIndexing: false,
@@ -75,6 +82,8 @@ const FTPClient = () => {
         window.electronAPI.removeAllListeners("menu-download");
         window.electronAPI.removeAllListeners("bookmarks-changed");
         window.electronAPI.removeAllListeners("transfer-progress");
+        window.electronAPI.removeAllListeners("menu-ai-settings");
+        window.electronAPI.removeAllListeners("menu-toggle-assistant");
       }
     };
   }, []);
@@ -97,6 +106,8 @@ const FTPClient = () => {
       window.electronAPI.onMenuUpload(() => menuActionsRef.current.upload());
       window.electronAPI.onMenuDownload(() => menuActionsRef.current.download());
       window.electronAPI.onBookmarksChanged(() => loadBookmarks());
+      window.electronAPI.onMenuAction("ai-settings", () => setShowAISettings(true));
+      window.electronAPI.onMenuAction("toggle-assistant", () => setShowAssistant((v) => !v));
 
       window.electronAPI.onTransferProgress((update) => {
         setTransfers((prev) => {
@@ -637,6 +648,18 @@ const FTPClient = () => {
           <div className="flex items-center gap-2 electron-no-drag">
             {isConnected ? (
               <>
+                <button
+                  onClick={() => setShowAssistant((v) => !v)}
+                  className={`px-3 py-1.5 rounded-lg border text-sm flex items-center gap-1.5 transition-all duration-200 ${
+                    showAssistant
+                      ? "bg-purple-600 text-white border-purple-600 shadow-md"
+                      : "bg-purple-500/10 text-purple-600 dark:text-purple-300 border-purple-200/40 dark:border-purple-500/30 hover:border-purple-300"
+                  }`}
+                  title="Ask your data (Cmd/Ctrl+J)"
+                >
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  Ask AI
+                </button>
                 {!isCurrentConnectionBookmarked() && (
                   <button
                     onClick={handleSaveAsBookmark}
@@ -1050,6 +1073,18 @@ const FTPClient = () => {
             </div>
           )}
         </div>
+        <AnimatePresence>
+          {isConnected && showAssistant && (
+            <AssistantPanel
+              connectionInfo={connectionInfo}
+              currentPath={currentPath}
+              settingsVersion={aiSettingsVersion}
+              onClose={() => setShowAssistant(false)}
+              onOpenSettings={() => setShowAISettings(true)}
+              onOpenInWorkbench={setQueryTarget}
+            />
+          )}
+        </AnimatePresence>
         <TransferQueue
           transfers={transfers}
           onClearCompleted={() =>
@@ -1068,6 +1103,14 @@ const FTPClient = () => {
       />
 
       {/* Modals */}
+      <AnimatePresence>
+        {showAISettings && (
+          <AISettingsModal
+            onClose={() => setShowAISettings(false)}
+            onSaved={() => setAiSettingsVersion((v) => v + 1)}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {queryTarget && (
           <QueryWorkbench
