@@ -5,11 +5,11 @@ const {
   PutObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  CopyObjectCommand,
 } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const fs = require("fs");
 const path = require("path");
-const parquet = require("@dsnp/parquetjs");
 const BaseConnectionManager = require("./baseManager");
 
 class S3ConnectionManager extends BaseConnectionManager {
@@ -91,18 +91,6 @@ class S3ConnectionManager extends BaseConnectionManager {
         endpoint: this.endpoint,
       });
 
-      console.log("Parsed S3 config:", {
-        bucket: this.bucket,
-        region: this.region,
-        endpoint: this.endpoint,
-        accessKey: (config.username || config.accessKey || '').trim().substring(0, 8) + "...",
-        hasSecretKey: !!(config.password || config.secretKey),
-        secretKeyLength: (config.password || config.secretKey || '').trim().length,
-        secretKeyPrefix: (config.password || config.secretKey || '').trim().substring(0, 8) + "...",
-        originalSecretKeyLength: (config.password || config.secretKey || '').length,
-        hadWhitespace: (config.password || config.secretKey || '').length !== (config.password || config.secretKey || '').trim().length
-      });
-
       // Configure S3 client for IBM Cloud Object Storage
       const s3Config = {
         region: this.region,
@@ -160,8 +148,6 @@ class S3ConnectionManager extends BaseConnectionManager {
         ),
       ]);
 
-      console.log("S3 connection successful");
-
       this.isConnected = true;
       this.connectionInfo = {
         type: "s3",
@@ -218,19 +204,29 @@ class S3ConnectionManager extends BaseConnectionManager {
         `S3 listDirectory: prefix="${prefix}", cleanPrefix="${cleanPrefix}", bucket="${this.bucket}"`
       );
 
-      // Get the main directory listing
-      const command = new ListObjectsV2Command({
-        Bucket: this.bucket,
-        Prefix: cleanPrefix,
-        Delimiter: "/",
-      });
+      // Get the main directory listing (all pages)
+      const response = { CommonPrefixes: [], Contents: [] };
+      let continuationToken;
+      do {
+        const page = await this.s3Client.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket,
+            Prefix: cleanPrefix,
+            Delimiter: "/",
+            ContinuationToken: continuationToken,
+          })
+        );
+        response.CommonPrefixes.push(...(page.CommonPrefixes || []));
+        response.Contents.push(...(page.Contents || []));
+        continuationToken = page.IsTruncated
+          ? page.NextContinuationToken
+          : undefined;
+      } while (continuationToken);
 
-      const response = await this.s3Client.send(command);
       console.log("S3 listDirectory response:", {
-        CommonPrefixes: response.CommonPrefixes?.length || 0,
-        Contents: response.Contents?.length || 0,
-        IsTruncated: response.IsTruncated,
-        Prefix: cleanPrefix
+        CommonPrefixes: response.CommonPrefixes.length,
+        Contents: response.Contents.length,
+        Prefix: cleanPrefix,
       });
 
       const files = [];
@@ -241,7 +237,7 @@ class S3ConnectionManager extends BaseConnectionManager {
       // Add directories (common prefixes) with file counts
       if (response.CommonPrefixes) {
         for (const commonPrefix of response.CommonPrefixes) {
-          const folderName = commonPrefix.Prefix.replace(cleanPrefix, "").replace("/", "");
+          const folderName = commonPrefix.Prefix.slice(cleanPrefix.length).replace(/\/$/, "");
           if (folderName) {
             console.log(`Found directory: ${folderName}`);
             
@@ -255,7 +251,7 @@ class S3ConnectionManager extends BaseConnectionManager {
                 fileCount: fileCount,
                 type: "folder",
                 isDirectory: true,
-                modifiedAt: new Date(),
+                modifiedAt: null,
                 permissions: "drwxr-xr-x",
                 owner: "owner",
                 group: "group",
@@ -271,7 +267,7 @@ class S3ConnectionManager extends BaseConnectionManager {
           // Skip the current directory entry and directory markers
           if (object.Key === cleanPrefix || object.Key.endsWith("/")) continue;
 
-          const fileName = object.Key.replace(cleanPrefix, "");
+          const fileName = object.Key.slice(cleanPrefix.length);
           if (fileName && !fileName.includes("/")) {
             console.log(`Found file: ${fileName}`);
             files.push(
@@ -280,7 +276,7 @@ class S3ConnectionManager extends BaseConnectionManager {
                 size: object.Size || 0,
                 type: "file",
                 isDirectory: false,
-                modifiedAt: object.LastModified || new Date(),
+                modifiedAt: object.LastModified || null,
                 permissions: "-rw-r--r--",
                 owner: "owner",
                 group: "group",
@@ -465,22 +461,13 @@ class S3ConnectionManager extends BaseConnectionManager {
 
       if (isDirectory) {
         // Delete all objects with this prefix
-        const listCommand = new ListObjectsV2Command({
-          Bucket: this.bucket,
-          Prefix: cleanPath.endsWith("/") ? cleanPath : cleanPath + "/",
-        });
-
-        const listResponse = await this.s3Client.send(listCommand);
-
-        if (listResponse.Contents && listResponse.Contents.length > 0) {
-          // Delete objects in batches
-          for (const object of listResponse.Contents) {
-            const deleteCommand = new DeleteObjectCommand({
-              Bucket: this.bucket,
-              Key: object.Key,
-            });
-            await this.s3Client.send(deleteCommand);
-          }
+        const keys = await this.listAllKeys(
+          cleanPath.endsWith("/") ? cleanPath : cleanPath + "/"
+        );
+        for (const key of keys) {
+          await this.s3Client.send(
+            new DeleteObjectCommand({ Bucket: this.bucket, Key: key })
+          );
         }
       } else {
         // Delete single file
@@ -532,150 +519,109 @@ class S3ConnectionManager extends BaseConnectionManager {
     }
   }
 
+  toKey(remotePath) {
+    return remotePath.startsWith("/") ? remotePath.substring(1) : remotePath;
+  }
+
+  async listAllKeys(prefix) {
+    const keys = [];
+    let continuationToken;
+    do {
+      const page = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+      keys.push(...(page.Contents || []).map((object) => object.Key));
+      continuationToken = page.IsTruncated
+        ? page.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+    return keys;
+  }
+
+  async getFileSize(remotePath) {
+    if (!this.isConnected || !this.s3Client) {
+      throw new Error("Not connected to S3");
+    }
+    const head = await this.s3Client.send(
+      new HeadObjectCommand({ Bucket: this.bucket, Key: this.toKey(remotePath) })
+    );
+    return head.ContentLength || 0;
+  }
+
+  async readFile(remotePath) {
+    if (!this.isConnected || !this.s3Client) {
+      throw new Error("Not connected to S3");
+    }
+    const result = await this.s3Client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: this.toKey(remotePath) })
+    );
+    const chunks = [];
+    for await (const chunk of result.Body) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
+
   async previewFile(filePath) {
+    try {
+      return await super.previewFile(filePath);
+    } catch (error) {
+      console.error("S3 preview error:", error);
+      throw new Error(`S3 preview failed: ${error.message}`);
+    }
+  }
+
+  async copyObject(sourceKey, destinationKey) {
+    // CopySource must be URL-encoded, but "/" separators are kept.
+    const copySource = `${this.bucket}/${sourceKey}`
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/");
+    await this.s3Client.send(
+      new CopyObjectCommand({
+        Bucket: this.bucket,
+        CopySource: copySource,
+        Key: destinationKey,
+      })
+    );
+  }
+
+  /**
+   * S3 has no rename: copy every affected object to the new key, then delete the old one.
+   */
+  async rename(oldPath, newPath) {
     try {
       if (!this.isConnected || !this.s3Client) {
         throw new Error("Not connected to S3");
       }
 
-      // Remove leading slash
-      const cleanPath = filePath.startsWith("/") ? filePath.substring(1) : filePath;
-      const fileExtension = path.extname(cleanPath).toLowerCase();
+      const oldKey = this.toKey(oldPath).replace(/\/$/, "");
+      const newKey = this.toKey(newPath).replace(/\/$/, "");
 
-      // First, get object info to check size
-      const headCommand = new HeadObjectCommand({
-        Bucket: this.bucket,
-        Key: cleanPath,
-      });
+      const folderKeys = await this.listAllKeys(`${oldKey}/`);
+      const moves =
+        folderKeys.length > 0
+          ? folderKeys.map((key) => [key, newKey + key.slice(oldKey.length)])
+          : [[oldKey, newKey]];
 
-      const headResult = await this.s3Client.send(headCommand);
-
-      // Check file size (limit to 10MB for preview)
-      const maxSize = 10 * 1024 * 1024; // 10MB
-      if (headResult.ContentLength > maxSize) {
-        throw new Error("File too large for preview (max 10MB)");
+      for (const [from, to] of moves) {
+        await this.copyObject(from, to);
+      }
+      for (const [from] of moves) {
+        await this.s3Client.send(
+          new DeleteObjectCommand({ Bucket: this.bucket, Key: from })
+        );
       }
 
-      // Get the file content
-      const getCommand = new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: cleanPath,
-      });
-
-      const result = await this.s3Client.send(getCommand);
-
-      // Convert stream to buffer
-      const chunks = [];
-      for await (const chunk of result.Body) {
-        chunks.push(chunk);
-      }
-      const buffer = Buffer.concat(chunks);
-      
-      let content;
-
-      if (fileExtension === '.parquet') {
-        // Handle Parquet files
-        try {
-          // Create a temporary file to read the parquet data
-          const tempFilePath = path.join(__dirname, '../../tmp', `preview-${Date.now()}.parquet`);
-          
-          // Ensure tmp directory exists
-          const tmpDir = path.dirname(tempFilePath);
-          if (!fs.existsSync(tmpDir)) {
-            fs.mkdirSync(tmpDir, { recursive: true });
-          }
-          
-          // Write buffer to temporary file
-          fs.writeFileSync(tempFilePath, buffer);
-          
-          // Read parquet file
-          const reader = await parquet.ParquetReader.openFile(tempFilePath);
-          
-          // Get schema - handle case where schema might not be available
-          let schemaInfo = [];
-          try {
-            const schema = reader.getSchema();
-            if (schema && schema.fieldList) {
-              schemaInfo = schema.fieldList.map(field => ({
-                name: field.name,
-                type: field.primitiveType || field.originalType || 'unknown'
-              }));
-            }
-          } catch (schemaError) {
-            console.log("Schema read error, continuing without schema info:", schemaError.message);
-          }
-          
-          // Read rows for preview - don't rely on getRowCount
-          const cursor = reader.getCursor();
-          const rows = [];
-          let record = null;
-          let count = 0;
-          
-          console.log("Starting to read Parquet rows...");
-          try {
-            while (count < 100 && (record = await cursor.next())) {
-              rows.push(record);
-              count++;
-              if (count % 10 === 0) {
-                console.log(`Read ${count} rows so far...`);
-              }
-            }
-            console.log(`Finished reading ${rows.length} total rows`);
-          } catch (readError) {
-            console.log("Row reading stopped at row", count, ":", readError.message);
-          }
-          
-          await reader.close();
-          
-          // Clean up temporary file
-          fs.unlinkSync(tempFilePath);
-          
-          // Convert to JSON for display
-          content = JSON.stringify({
-            schema: schemaInfo,
-            rowCount: `${rows.length}+ rows (preview only)`,
-            columnCount: schemaInfo.length || (rows.length > 0 ? Object.keys(rows[0]).length : 0),
-            previewRows: rows,
-            message: `Showing first ${rows.length} rows successfully read`,
-            fileInfo: {
-              fileName: path.basename(cleanPath),
-              fileSize: headResult.ContentLength
-            }
-          }, null, 2);
-          
-        } catch (parquetError) {
-          console.error("Parquet parsing error:", parquetError);
-          
-          // Fallback: try to provide basic file info without parsing
-          content = JSON.stringify({
-            error: "Unable to parse Parquet file",
-            message: "This Parquet file format may not be supported for preview",
-            fileName: path.basename(cleanPath),
-            fileSize: headResult.ContentLength,
-            suggestion: "Please download the file to view its contents with a specialized Parquet viewer",
-            details: parquetError.message
-          }, null, 2);
-        }
-      } else {
-        // Handle text files (JSON, CSV, TXT, etc.)
-        try {
-          content = buffer.toString('utf-8');
-        } catch (error) {
-          throw new Error("File contains binary data and cannot be previewed");
-        }
-      }
-
-      console.log("S3 file preview successful:", cleanPath);
-      return {
-        success: true,
-        content: content,
-        fileName: path.basename(cleanPath),
-        fileSize: headResult.ContentLength,
-        lastModified: headResult.LastModified,
-      };
+      console.log(`S3 renamed ${oldKey} -> ${newKey} (${moves.length} objects)`);
+      return { success: true, message: "Renamed successfully" };
     } catch (error) {
-      console.error("S3 preview error:", error);
-      throw new Error(`S3 preview failed: ${error.message}`);
+      console.error("S3 rename error:", error);
+      throw new Error(`S3 rename failed: ${error.message}`);
     }
   }
 

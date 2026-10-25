@@ -12,12 +12,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("ftp-upload", localPath, remotePath),
   ftpDownload: (remotePath, localPath) =>
     ipcRenderer.invoke("ftp-download", remotePath, localPath),
-  ftpDelete: (remotePath) => ipcRenderer.invoke("ftp-delete", remotePath),
+  ftpDelete: (remotePath, isDirectory = false) =>
+    ipcRenderer.invoke("ftp-delete", remotePath, isDirectory),
   ftpRename: (oldPath, newPath) =>
     ipcRenderer.invoke("ftp-rename", oldPath, newPath),
   ftpMkdir: (remotePath) => ipcRenderer.invoke("ftp-mkdir", remotePath),
   ftpGetStatus: () => ipcRenderer.invoke("ftp-get-status"),
   ftpPreview: (filePath) => ipcRenderer.invoke("ftp-preview", filePath),
+  ftpExtractContent: (remotePath, knownSize) =>
+    ipcRenderer.invoke("ftp-extract-content", remotePath, knownSize),
 
   // Bookmark Operations
   bookmarksGetAll: () => ipcRenderer.invoke("bookmarks-get-all"),
@@ -35,7 +38,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   fsGetStats: (filePath) => ipcRenderer.invoke("fs-get-stats", filePath),
 
   // Dialog Operations
-  dialogOpenFile: () => ipcRenderer.invoke("dialog-open-file"),
+  dialogOpenFile: (options) => ipcRenderer.invoke("dialog-open-file", options),
+  dialogOpenFiles: (options) =>
+    ipcRenderer.invoke("dialog-open-files", options),
+  dialogOpenDirectory: (options) =>
+    ipcRenderer.invoke("dialog-open-directory", options),
   dialogSaveFile: (options) => ipcRenderer.invoke("dialog-save-file", options),
 
   // Additional FTP Operations
@@ -47,7 +54,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("index-save", indexData, customFileName),
   indexLoad: (customFileName = null) =>
     ipcRenderer.invoke("index-load", customFileName),
-  indexClear: () => ipcRenderer.invoke("index-clear"),
+  indexClear: (customFileName = null) =>
+    ipcRenderer.invoke("index-clear", customFileName),
+  indexDelete: (customFileName) =>
+    ipcRenderer.invoke("index-delete", customFileName),
 
   // Semantic Search Operations
   semanticSearchInitialize: () =>
@@ -65,10 +75,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // System Operations
   getUserDataPath: () => ipcRenderer.invoke("get-user-data-path"),
-
-  // Parquet File Operations
-  parseParquet: (arrayBuffer) =>
-    ipcRenderer.invoke("parse-parquet", arrayBuffer),
 
   // Event Listeners
   onTransferProgress: (callback) => {
@@ -90,6 +96,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   onMenuManageBookmarks: (callback) => {
     ipcRenderer.on("menu-manage-bookmarks", callback);
+  },
+  onMenuUpload: (callback) => {
+    ipcRenderer.on("menu-upload", callback);
+  },
+  onMenuDownload: (callback) => {
+    ipcRenderer.on("menu-download", callback);
+  },
+  onBookmarksChanged: (callback) => {
+    ipcRenderer.on("bookmarks-changed", callback);
   },
 
   // Remove listeners

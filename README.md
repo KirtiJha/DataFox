@@ -90,7 +90,7 @@ DataFox transforms the file transfer experience with a **contemporary interface*
 
 ### 🛡️ **Security & Privacy**
 - **Context Isolation** - Secure Electron architecture
-- **Encrypted Storage** - System keychain integration
+- **Encrypted Storage** - Bookmark passwords encrypted with the OS keychain (Electron `safeStorage`)
 - **No Remote Code** - Eliminates security vulnerabilities
 - **Secure IPC** - Safe communication between processes
 
@@ -231,11 +231,12 @@ npm run dist:linux  # Linux packages
 
 #### Connection Management
 - `Cmd+N` / `Ctrl+N` - New Connection
-- `Cmd+B` / `Ctrl+B` - Manage Bookmarks
-- `Cmd+D` / `Ctrl+D` - Disconnect
+- `Cmd+K` / `Ctrl+K` - Quick Connect
+- `Cmd+Shift+B` / `Ctrl+Shift+B` - Manage Bookmarks
 
 #### File Operations
 - `Cmd+U` / `Ctrl+U` - Upload Files
+- `Cmd+D` / `Ctrl+D` - Download Selected Files
 - `Cmd+Shift+N` / `Ctrl+Shift+N` - Create Folder
 - `Space` - Preview Selected File
 - `F5` - Refresh Directory
@@ -262,38 +263,41 @@ npm run dist:linux  # Linux packages
 ### 📁 Project Structure
 ```
 datafox/
-├── 🎯 src/main/              # Electron main process
-│   ├── main.js               # Application entry point
-│   ├── managers/             # Protocol managers
-│   │   ├── ftpManager.js     # FTP/SFTP handling
-│   │   └── s3Manager.js      # S3 connections
-│   ├── mainSemanticSearchEngine.js # AI search engine
-│   └── preload.js            # Secure IPC bridge
-├── 🖼️ components/            # React components
-│   ├── FTPClient.js          # Main application
-│   ├── FileExplorer.js       # File browser with search
-│   ├── SearchResults.js      # Search results display
-│   ├── ContentSearchPanel.js # Content search interface
-│   ├── FilterPanel.js        # Advanced filtering
-│   ├── PreviewModal.js       # File preview modal
-│   ├── ConnectionModal.js    # Connection dialog
-│   ├── BookmarkModal.js      # Bookmark management
-│   └── StatusBar.js          # Status display
-├── 🔍 utils/                 # Search utilities
-│   ├── BrowserSemanticSearchEngine.js # Client-side AI search
-│   ├── unifiedSearchEngine.js # Combined search logic
-│   └── searchEngine.js       # Core search functionality
-├── 🎨 styles/                # Styling
-│   └── globals.css           # Tailwind configuration
-├── 🦊 assets/                # Brand assets
-│   ├── icons/                # App icons
-│   └── screenshots/          # Documentation images
-├── 🏗️ build/                 # Build configuration
-│   ├── entitlements.mac.plist # macOS security entitlements
-│   ├── background.png        # DMG background
-│   └── build-release.sh      # Automated build script
-└── 📋 docs/                  # Documentation
+├── 🎯 src/                       # Electron main process
+│   ├── main.js                   # App entry point, menus, IPC handlers
+│   ├── preload.js                # Secure IPC bridge (window.electronAPI)
+│   ├── ftpManager.js             # Facade over the active connection
+│   ├── bookmarkManager.js        # Bookmark storage
+│   ├── mainSemanticSearchEngine.js # Optional embedding-based search
+│   └── managers/
+│       ├── connectionFactory.js  # Picks a manager by protocol
+│       ├── baseManager.js        # Shared interface + preview/extract
+│       ├── ftpConnectionManager.js # FTP/FTPS/SFTP
+│       ├── s3Manager.js          # S3 / IBM Cloud Object Storage
+│       └── fileContent.js        # Preview + content extraction (JSON/Parquet/text)
+├── 🖼️ components/                # React components
+│   ├── FTPClient.js              # Main application
+│   ├── FileExplorer.js           # File browser with search
+│   ├── SearchResults.js          # Search results display
+│   ├── FilterPanel.js            # Advanced filtering
+│   ├── PreviewModal.js           # File preview modal
+│   ├── ConnectionModal.js        # Connection dialog
+│   ├── BookmarkModal.js          # Bookmark management
+│   └── StatusBar.js              # Status display
+├── 🔍 utils/
+│   ├── searchEngine.js           # Per-connection search engine (public API)
+│   ├── BrowserSemanticSearchEngine.js # Renderer side of semantic search
+│   └── search/
+│       ├── fileTypes.js          # Extension/type/path helpers
+│       ├── queryMatcher.js       # Query parsing, matching, filters, scoring
+│       ├── contentIndexer.js     # Remote crawl + content extraction pool
+│       └── indexStore.js         # Index persistence
+├── 🎨 styles/globals.css         # Tailwind styles
+├── 🦊 public/assets/icons/       # App icons
+└── 🧪 test-data/                 # Sample JSON for content search
 ```
+
+See [CONTENT_SEARCH.md](CONTENT_SEARCH.md) for how indexing and search work.
 
 ### 🔒 Security Architecture
 

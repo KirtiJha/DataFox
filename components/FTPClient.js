@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
 import {
@@ -23,7 +23,7 @@ import {
 import ConnectionModal from "./ConnectionModal";
 import BookmarkModal from "./BookmarkModal";
 import PreviewModal from "./PreviewModal";
-import FileExplorer from "./FileExplorer";
+import FileExplorer, { cleanupSearchEngine } from "./FileExplorer";
 import TransferQueue from "./TransferQueue";
 import StatusBar from "./StatusBar";
 
@@ -69,6 +69,9 @@ const FTPClient = () => {
         window.electronAPI.removeAllListeners("menu-new-connection");
         window.electronAPI.removeAllListeners("menu-quick-connect");
         window.electronAPI.removeAllListeners("menu-manage-bookmarks");
+        window.electronAPI.removeAllListeners("menu-upload");
+        window.electronAPI.removeAllListeners("menu-download");
+        window.electronAPI.removeAllListeners("bookmarks-changed");
       }
     };
   }, []);
@@ -86,8 +89,15 @@ const FTPClient = () => {
       window.electronAPI.onMenuManageBookmarks(() => {
         setShowBookmarkModal(true);
       });
+
+      // Listeners are registered once, so they call through a ref to see current state.
+      window.electronAPI.onMenuUpload(() => menuActionsRef.current.upload());
+      window.electronAPI.onMenuDownload(() => menuActionsRef.current.download());
+      window.electronAPI.onBookmarksChanged(() => loadBookmarks());
     }
   };
+
+  const menuActionsRef = useRef({ upload: () => {}, download: () => {} });
 
   // Indexing status update handler
   const handleIndexingStatusChange = useCallback((newStatus) => {
@@ -248,6 +258,9 @@ const FTPClient = () => {
           }));
         }
 
+        // Stop background indexing for this connection; its saved index is kept on disk.
+        cleanupSearchEngine(connectionInfo);
+
         await window.electronAPI.ftpDisconnect();
         setIsConnected(false);
         setConnectionInfo(null);
@@ -360,13 +373,20 @@ const FTPClient = () => {
     }
   };
 
+  // Search results carry their own full path; regular listings are relative to currentPath.
+  const getRemotePath = (file) =>
+    file.fullPath ||
+    file.path ||
+    (currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`);
+
   const handleUpload = async () => {
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
-        const result = await window.electronAPI.dialogOpenFile();
-        if (!result.canceled && result.filePaths.length > 0) {
-          const filePath = result.filePaths[0];
-          const fileName = filePath.split("/").pop();
+        const result = await window.electronAPI.dialogOpenFiles();
+        if (result.canceled || result.filePaths.length === 0) return;
+
+        for (const filePath of result.filePaths) {
+          const fileName = filePath.split(/[\\/]/).pop();
           const remotePath =
             currentPath === "/" ? `/${fileName}` : `${currentPath}/${fileName}`;
 
@@ -376,11 +396,11 @@ const FTPClient = () => {
           );
           if (uploadResult.success) {
             toast.success(`Uploaded ${fileName}`);
-            await loadDirectory(currentPath);
           } else {
-            throw new Error(uploadResult.error);
+            toast.error(`Upload of ${fileName} failed: ${uploadResult.error}`);
           }
         }
+        await loadDirectory(currentPath);
       }
     } catch (error) {
       toast.error(`Upload failed: ${error.message}`);
@@ -393,11 +413,8 @@ const FTPClient = () => {
         const result = await window.electronAPI.dialogSaveFile({
           defaultPath: file.name,
         });
-        if (!result.canceled) {
-          const remotePath =
-            currentPath === "/"
-              ? `/${file.name}`
-              : `${currentPath}/${file.name}`;
+        if (!result.canceled && result.filePath) {
+          const remotePath = getRemotePath(file);
 
           const downloadResult = await window.electronAPI.ftpDownload(
             remotePath,
@@ -415,25 +432,51 @@ const FTPClient = () => {
     }
   };
 
+  const handleDownloadSelected = async () => {
+    const files = selectedFiles.filter((file) => !file.isDirectory);
+    if (files.length === 0) {
+      toast.error("Select one or more files to download");
+      return;
+    }
+    if (files.length === 1) {
+      await handleDownload(files[0]);
+      return;
+    }
+
+    const result = await window.electronAPI.dialogOpenDirectory({
+      title: "Download files to…",
+    });
+    if (result.canceled || result.filePaths.length === 0) return;
+
+    const sep = window.nodeAPI?.path.sep || "/";
+    let downloaded = 0;
+    for (const file of files) {
+      const downloadResult = await window.electronAPI.ftpDownload(
+        getRemotePath(file),
+        `${result.filePaths[0]}${sep}${file.name}`
+      );
+      if (downloadResult.success) downloaded++;
+      else toast.error(`Download of ${file.name} failed: ${downloadResult.error}`);
+    }
+    if (downloaded > 0) toast.success(`Downloaded ${downloaded} of ${files.length} files`);
+  };
+
+  const requireConnection = (action) => () => {
+    if (!isConnected) {
+      toast.error("Connect to a server first");
+      return;
+    }
+    action();
+  };
+  menuActionsRef.current = {
+    upload: requireConnection(handleUpload),
+    download: requireConnection(handleDownloadSelected),
+  };
+
   const handlePreview = async (file) => {
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
-        // Handle different path scenarios
-        let remotePath;
-
-        if (file.fullPath) {
-          // Search result with full path
-          remotePath = file.fullPath;
-        } else if (file.path) {
-          // File with explicit path
-          remotePath = file.path;
-        } else {
-          // Regular file in current directory
-          remotePath =
-            currentPath === "/"
-              ? `/${file.name}`
-              : `${currentPath}/${file.name}`;
-        }
+        const remotePath = getRemotePath(file);
 
         console.log("Preview attempt for path:", remotePath);
         console.log("File object:", file);
@@ -512,10 +555,10 @@ const FTPClient = () => {
 
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
-        const remotePath =
-          currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
-
-        const result = await window.electronAPI.ftpDelete(remotePath);
+        const result = await window.electronAPI.ftpDelete(
+          getRemotePath(file),
+          !!file.isDirectory
+        );
         if (result.success) {
           toast.success(`Deleted ${file.name}`);
           await loadDirectory(currentPath);
