@@ -92,7 +92,7 @@ class ModernFTPClient {
           },
           {
             label: "Quick Connect",
-            accelerator: "CmdOrCtrl+Q",
+            accelerator: "CmdOrCtrl+K",
             click: () => {
               this.mainWindow.webContents.send("menu-quick-connect");
             },
@@ -201,7 +201,7 @@ class ModernFTPClient {
             label: "Learn More",
             click: () => {
               shell.openExternal(
-                "https://github.com/your-repo/modern-ftp-client"
+                "https://github.com/kirtijha/datafox"
               );
             },
           },
@@ -213,11 +213,35 @@ class ModernFTPClient {
     Menu.setApplicationMenu(menu);
   }
 
+  // Index/cache files live directly in userData; reject anything that could
+  // escape it (e.g. "../../somewhere.json") coming from the renderer.
+  resolveIndexPath(customFileName) {
+    const fileName = customFileName || "search-indexes.json";
+    if (
+      path.basename(fileName) !== fileName ||
+      !/^[\w.-]+\.json$/.test(fileName)
+    ) {
+      throw new Error(`Invalid index file name: ${fileName}`);
+    }
+    return path.join(app.getPath("userData"), fileName);
+  }
+
+  // Wrap an operation so the renderer always gets { success, ... } instead of a rejected promise.
+  async respond(operation) {
+    try {
+      const result = await operation();
+      return result && typeof result === "object" && "success" in result
+        ? result
+        : { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   setupIPC() {
     // FTP Operations
     ipcMain.handle("ftp-connect", async (event, connectionData) => {
       try {
-        console.log("IPC Handler: ftp-connect received:", connectionData);
         const result = await this.ftpManager.connect(connectionData);
 
         // Add connection info to the result for the frontend
@@ -225,11 +249,10 @@ class ModernFTPClient {
           result.data = this.ftpManager.getConnectionInfo();
         }
 
-        console.log("IPC Handler: ftp-connect result:", result);
         return result;
       } catch (error) {
         console.error("IPC Handler: ftp-connect error:", error);
-        throw error;
+        return { success: false, error: error.message };
       }
     });
 
@@ -251,29 +274,29 @@ class ModernFTPClient {
       }
     });
 
-    ipcMain.handle("ftp-upload", async (event, localPath, remotePath) => {
-      return await this.ftpManager.uploadFile(localPath, remotePath);
-    });
+    ipcMain.handle("ftp-upload", (event, localPath, remotePath) =>
+      this.respond(() => this.ftpManager.uploadFile(localPath, remotePath))
+    );
 
-    ipcMain.handle("ftp-download", async (event, remotePath, localPath) => {
-      return await this.ftpManager.downloadFile(remotePath, localPath);
-    });
+    ipcMain.handle("ftp-download", (event, remotePath, localPath) =>
+      this.respond(() => this.ftpManager.downloadFile(remotePath, localPath))
+    );
 
-    ipcMain.handle("ftp-delete", async (event, remotePath) => {
-      return await this.ftpManager.deleteFile(remotePath);
-    });
+    ipcMain.handle("ftp-delete", (event, remotePath, isDirectory = false) =>
+      this.respond(() => this.ftpManager.deleteFile(remotePath, isDirectory))
+    );
 
-    // ipcMain.handle('ftp-rename', async (event, oldPath, newPath) => {
-    //     return await this.ftpManager.rename(oldPath, newPath);
-    // });
+    ipcMain.handle("ftp-rename", (event, oldPath, newPath) =>
+      this.respond(() => this.ftpManager.rename(oldPath, newPath))
+    );
 
-    ipcMain.handle("ftp-mkdir", async (event, remotePath) => {
-      return await this.ftpManager.createDirectory(remotePath);
-    });
+    ipcMain.handle("ftp-mkdir", (event, remotePath) =>
+      this.respond(() => this.ftpManager.createDirectory(remotePath))
+    );
 
-    ipcMain.handle("ftp-create-directory", async (event, remotePath) => {
-      return await this.ftpManager.createDirectory(remotePath);
-    });
+    ipcMain.handle("ftp-create-directory", (event, remotePath) =>
+      this.respond(() => this.ftpManager.createDirectory(remotePath))
+    );
 
     ipcMain.handle("ftp-get-status", async (event) => {
       return this.ftpManager.getStatus();
@@ -297,12 +320,15 @@ class ModernFTPClient {
       }
     });
 
+    // Content indexing: download + extract in the main process, return only the index entry
+    ipcMain.handle("ftp-extract-content", (event, remotePath, knownSize) =>
+      this.respond(() => this.ftpManager.extractContent(remotePath, knownSize))
+    );
+
     // Bookmark Operations
     ipcMain.handle("bookmarks-get-all", async (event) => {
       try {
-        console.log("Main process: bookmarks-get-all called");
         const result = await this.bookmarkManager.getAllBookmarks();
-        console.log("Main process: getAllBookmarks result:", result);
         return result;
       } catch (error) {
         console.error("Main process: getAllBookmarks error:", error);
@@ -312,9 +338,7 @@ class ModernFTPClient {
 
     ipcMain.handle("bookmarks-save", async (event, bookmark) => {
       try {
-        console.log("Main process: bookmarks-save called with:", bookmark);
         const result = await this.bookmarkManager.saveBookmark(bookmark);
-        console.log("Main process: bookmark save result:", result);
         return result;
       } catch (error) {
         console.error("Main process: bookmark save error:", error);
@@ -345,17 +369,31 @@ class ModernFTPClient {
       return result.canceled ? [] : result.filePaths;
     });
 
-    ipcMain.handle("dialog-open-file", async (event) => {
-      const result = await dialog.showOpenDialog(this.mainWindow, {
+    // Dialogs return Electron's native { canceled, filePaths } / { canceled, filePath } shapes
+    ipcMain.handle("dialog-open-file", (event, options = {}) =>
+      dialog.showOpenDialog(this.mainWindow, {
         properties: ["openFile"],
-      });
-      return result.canceled ? null : { filePath: result.filePaths[0] };
-    });
+        ...options,
+      })
+    );
 
-    ipcMain.handle("dialog-save-file", async (event, options = {}) => {
-      const result = await dialog.showSaveDialog(this.mainWindow, options);
-      return result.canceled ? null : { filePath: result.filePath };
-    });
+    ipcMain.handle("dialog-open-files", (event, options = {}) =>
+      dialog.showOpenDialog(this.mainWindow, {
+        properties: ["openFile", "multiSelections"],
+        ...options,
+      })
+    );
+
+    ipcMain.handle("dialog-open-directory", (event, options = {}) =>
+      dialog.showOpenDialog(this.mainWindow, {
+        properties: ["openDirectory", "createDirectory"],
+        ...options,
+      })
+    );
+
+    ipcMain.handle("dialog-save-file", (event, options = {}) =>
+      dialog.showSaveDialog(this.mainWindow, options)
+    );
 
     ipcMain.handle("fs-list-directory", async (event, dirPath) => {
       try {
@@ -386,7 +424,7 @@ class ModernFTPClient {
     });
 
     // Path utilities for renderer process
-    ipcMain.handle("path-join", (...args) => {
+    ipcMain.handle("path-join", (event, ...args) => {
       return path.join(...args);
     });
 
@@ -403,77 +441,45 @@ class ModernFTPClient {
     });
 
     // Index Storage Operations
-    ipcMain.handle(
-      "index-save",
-      async (event, indexData, customFileName = null) => {
-        try {
-          const userDataPath = app.getPath("userData");
-          const fileName = customFileName || "search-indexes.json";
-          const indexPath = path.join(userDataPath, fileName);
-
-          console.log(`📁 User data path: ${userDataPath}`);
-          console.log(`💾 Saving index to: ${indexPath}`);
-          console.log(
-            `📊 Index contains ${
-              indexData.contentIndex?.length || indexData.totalCount || 0
-            } entries`
-          );
-
-          await fs.ensureDir(path.dirname(indexPath));
-          await fs.writeJson(indexPath, indexData, { spaces: 2 });
-
-          console.log(`✅ Index saved successfully to: ${indexPath}`);
-          return { success: true, path: indexPath };
-        } catch (error) {
-          console.error("❌ Failed to save index:", error);
-          return { success: false, error: error.message };
-        }
+    ipcMain.handle("index-save", async (event, indexData, customFileName = null) => {
+      try {
+        const indexPath = this.resolveIndexPath(customFileName);
+        await fs.ensureDir(path.dirname(indexPath));
+        // Write to a temp file and rename so a crash never leaves a half-written index.
+        const tempPath = `${indexPath}.${process.pid}.tmp`;
+        await fs.writeJson(tempPath, indexData);
+        await fs.move(tempPath, indexPath, { overwrite: true });
+        return { success: true, path: indexPath };
+      } catch (error) {
+        console.error("❌ Failed to save index:", error);
+        return { success: false, error: error.message };
       }
-    );
+    });
 
     ipcMain.handle("index-load", async (event, customFileName = null) => {
       try {
-        const userDataPath = app.getPath("userData");
-        const fileName = customFileName || "search-indexes.json";
-        const indexPath = path.join(userDataPath, fileName);
-
-        console.log(`📁 Looking for index at: ${indexPath}`);
-
-        if (await fs.pathExists(indexPath)) {
-          const indexData = await fs.readJson(indexPath);
-          console.log(`✅ Index loaded from: ${indexPath}`);
-          console.log(
-            `📊 Loaded ${
-              indexData.contentIndex?.length || indexData.totalCount || 0
-            } entries`
-          );
-          return { success: true, data: indexData };
-        } else {
-          console.log(`❌ No existing index file found at: ${indexPath}`);
+        const indexPath = this.resolveIndexPath(customFileName);
+        if (!(await fs.pathExists(indexPath))) {
           return { success: true, data: null };
         }
+        return { success: true, data: await fs.readJson(indexPath) };
       } catch (error) {
         console.error("❌ Failed to load index:", error);
         return { success: false, error: error.message };
       }
     });
 
-    ipcMain.handle("index-clear", async (event) => {
+    const removeIndexFile = async (event, customFileName = null) => {
       try {
-        const userDataPath = app.getPath("userData");
-        const indexPath = path.join(userDataPath, "search-indexes.json");
-
-        if (await fs.pathExists(indexPath)) {
-          await fs.remove(indexPath);
-          console.log(`Index cleared: ${indexPath}`);
-        }
-
+        await fs.remove(this.resolveIndexPath(customFileName));
         return { success: true };
       } catch (error) {
-        console.error("Failed to clear index:", error);
+        console.error("Failed to remove index:", error);
         return { success: false, error: error.message };
       }
-    });
+    };
+    ipcMain.handle("index-clear", removeIndexFile);
+    ipcMain.handle("index-delete", removeIndexFile);
 
     // System Operations
     ipcMain.handle("get-user-data-path", async (event) => {
@@ -571,59 +577,19 @@ class ModernFTPClient {
       }
     });
 
-    // Parquet File Parsing
-    ipcMain.handle("parse-parquet", async (event, arrayBuffer) => {
-      try {
-        console.log(
-          `🔧 Main process: Parsing parquet file (${arrayBuffer.byteLength} bytes)`
-        );
-
-        // Import parquet library
-        const parquetjs = require("@dsnp/parquetjs");
-
-        // Convert ArrayBuffer to Buffer
-        const buffer = Buffer.from(arrayBuffer);
-
-        // Parse the parquet file
-        const reader = await parquetjs.ParquetReader.openBuffer(buffer);
-        const cursor = reader.getCursor();
-        const records = [];
-        let record;
-
-        // Read all records - no artificial limits
-        while ((record = await cursor.next())) {
-          records.push(record);
-        }
-
-        await reader.close();
-
-        console.log(
-          `🔧 ✅ Main process parquet parsing successful: ${records.length} rows`
-        );
-
-        return {
-          success: true,
-          data: records,
-          recordCount: records.length,
-          fields: records.length > 0 ? Object.keys(records[0]) : [],
-        };
-      } catch (error) {
-        console.error("❌ Main process parquet parsing failed:", error);
-        return {
-          success: false,
-          error: error.message,
-          data: null,
-        };
-      }
-    });
-
     // Progress updates
+    const sendToRenderer = (channel, data) => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(channel, data);
+      }
+    };
+
     this.ftpManager.on("progress", (data) => {
-      this.mainWindow.webContents.send("transfer-progress", data);
+      sendToRenderer("transfer-progress", data);
     });
 
     this.ftpManager.on("status-change", (status) => {
-      this.mainWindow.webContents.send("connection-status", status);
+      sendToRenderer("connection-status", status);
     });
   }
 }

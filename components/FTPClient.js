@@ -23,7 +23,7 @@ import {
 import ConnectionModal from "./ConnectionModal";
 import BookmarkModal from "./BookmarkModal";
 import PreviewModal from "./PreviewModal";
-import FileExplorer from "./FileExplorer";
+import FileExplorer, { cleanupSearchEngine } from "./FileExplorer";
 import TransferQueue from "./TransferQueue";
 import StatusBar from "./StatusBar";
 
@@ -248,6 +248,9 @@ const FTPClient = () => {
           }));
         }
 
+        // Stop background indexing for this connection; its saved index is kept on disk.
+        cleanupSearchEngine(connectionInfo);
+
         await window.electronAPI.ftpDisconnect();
         setIsConnected(false);
         setConnectionInfo(null);
@@ -360,13 +363,20 @@ const FTPClient = () => {
     }
   };
 
+  // Search results carry their own full path; regular listings are relative to currentPath.
+  const getRemotePath = (file) =>
+    file.fullPath ||
+    file.path ||
+    (currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`);
+
   const handleUpload = async () => {
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
-        const result = await window.electronAPI.dialogOpenFile();
-        if (!result.canceled && result.filePaths.length > 0) {
-          const filePath = result.filePaths[0];
-          const fileName = filePath.split("/").pop();
+        const result = await window.electronAPI.dialogOpenFiles();
+        if (result.canceled || result.filePaths.length === 0) return;
+
+        for (const filePath of result.filePaths) {
+          const fileName = filePath.split(/[\\/]/).pop();
           const remotePath =
             currentPath === "/" ? `/${fileName}` : `${currentPath}/${fileName}`;
 
@@ -376,11 +386,11 @@ const FTPClient = () => {
           );
           if (uploadResult.success) {
             toast.success(`Uploaded ${fileName}`);
-            await loadDirectory(currentPath);
           } else {
-            throw new Error(uploadResult.error);
+            toast.error(`Upload of ${fileName} failed: ${uploadResult.error}`);
           }
         }
+        await loadDirectory(currentPath);
       }
     } catch (error) {
       toast.error(`Upload failed: ${error.message}`);
@@ -393,11 +403,8 @@ const FTPClient = () => {
         const result = await window.electronAPI.dialogSaveFile({
           defaultPath: file.name,
         });
-        if (!result.canceled) {
-          const remotePath =
-            currentPath === "/"
-              ? `/${file.name}`
-              : `${currentPath}/${file.name}`;
+        if (!result.canceled && result.filePath) {
+          const remotePath = getRemotePath(file);
 
           const downloadResult = await window.electronAPI.ftpDownload(
             remotePath,
@@ -418,22 +425,7 @@ const FTPClient = () => {
   const handlePreview = async (file) => {
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
-        // Handle different path scenarios
-        let remotePath;
-
-        if (file.fullPath) {
-          // Search result with full path
-          remotePath = file.fullPath;
-        } else if (file.path) {
-          // File with explicit path
-          remotePath = file.path;
-        } else {
-          // Regular file in current directory
-          remotePath =
-            currentPath === "/"
-              ? `/${file.name}`
-              : `${currentPath}/${file.name}`;
-        }
+        const remotePath = getRemotePath(file);
 
         console.log("Preview attempt for path:", remotePath);
         console.log("File object:", file);
@@ -512,10 +504,10 @@ const FTPClient = () => {
 
     try {
       if (typeof window !== "undefined" && window.electronAPI) {
-        const remotePath =
-          currentPath === "/" ? `/${file.name}` : `${currentPath}/${file.name}`;
-
-        const result = await window.electronAPI.ftpDelete(remotePath);
+        const result = await window.electronAPI.ftpDelete(
+          getRemotePath(file),
+          !!file.isDirectory
+        );
         if (result.success) {
           toast.success(`Deleted ${file.name}`);
           await loadDirectory(currentPath);

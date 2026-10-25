@@ -45,8 +45,10 @@ export const cleanupSearchEngine = (connectionInfo) => {
           "-"
         );
 
-  if (connectionSearchEngines.has(connectionId)) {
-    console.log(`🧹 Cleaning up search engine for connection: ${connectionId}`);
+  const engine = connectionSearchEngines.get(connectionId);
+  if (engine) {
+    // The saved index stays on disk and is reloaded on the next connection.
+    engine.stopBackgroundIndexing();
     connectionSearchEngines.delete(connectionId);
   }
 };
@@ -142,35 +144,13 @@ const FileExplorer = ({
       console.log(
         `🔍 Creating new search engine for connection: ${connectionId}`
       );
-      const newEngine = new SearchEngine(connectionId);
+      const newEngine = new SearchEngine(connectionId, {
+        protocol: connectionInfo?.type,
+      });
       connectionSearchEngines.set(connectionId, newEngine);
 
-      // ✅ FIXED: Initialize storage immediately and synchronously mark as ready
-      newEngine
-        .initializeStorage()
-        .then((success) => {
-          if (success) {
-            console.log(
-              `📥 Loaded existing index for connection: ${connectionId}`
-            );
-          } else {
-            console.log(
-              `📝 No existing index found for connection: ${connectionId}, will create new one`
-            );
-          }
-          newEngine.storageReady = true; // Mark storage as ready
-        })
-        .catch((error) => {
-          console.log(
-            `📝 Failed to load existing index for connection: ${connectionId}, will create new one:`,
-            error
-          );
-          newEngine.storageReady = true; // Mark as ready even if loading failed
-        });
-    } else {
-      console.log(
-        `🔍 Using existing search engine for connection: ${connectionId}`
-      );
+      // initializeStorage always marks the engine ready, even if loading fails.
+      newEngine.initializeStorage();
     }
 
     return connectionSearchEngines.get(connectionId);
@@ -304,7 +284,7 @@ const FileExplorer = ({
         setIsUnifiedSearchReady(searchEngine.isUnifiedSearchReady);
 
         if (searchEngine.isUnifiedSearchReady) {
-          const stats = await searchEngine.unifiedSearch.getSearchStats();
+          const stats = await searchEngine.getSearchStats();
           setSearchStats(stats);
         }
       } catch (error) {

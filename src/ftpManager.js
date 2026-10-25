@@ -148,16 +148,29 @@ class FTPManager extends EventEmitter {
     }
   }
 
-  async deleteFile(remotePath) {
+  async deleteFile(remotePath, isDirectory = false) {
     try {
       if (!this.connectionManager || !this.isConnected) {
         throw new Error('Not connected to server');
       }
 
-      const result = await this.connectionManager.deleteFile(remotePath);
+      const result = await this.connectionManager.deleteItem(remotePath, isDirectory);
       return result;
     } catch (error) {
       console.error('FTPManager: Delete error:', error);
+      throw error;
+    }
+  }
+
+  async rename(oldPath, newPath) {
+    try {
+      if (!this.connectionManager || !this.isConnected) {
+        throw new Error('Not connected to server');
+      }
+
+      return await this.connectionManager.rename(oldPath, newPath);
+    } catch (error) {
+      console.error('FTPManager: Rename error:', error);
       throw error;
     }
   }
@@ -189,6 +202,17 @@ class FTPManager extends EventEmitter {
       console.error('FTPManager: Preview error:', error);
       return { success: false, error: error.message };
     }
+  }
+
+  /**
+   * Download a file and return its compact content-search index entry.
+   * Runs in the main process so file bytes never cross IPC.
+   */
+  async extractContent(remotePath, knownSize) {
+    if (!this.connectionManager || !this.isConnected) {
+      throw new Error('Not connected to server');
+    }
+    return this.connectionManager.extractContent(remotePath, knownSize);
   }
 
   // Helper method to map configuration between different formats
@@ -233,6 +257,13 @@ class FTPManager extends EventEmitter {
 
   isConnectionActive() {
     return this.isConnected && this.connectionManager !== null;
+  }
+
+  getStatus() {
+    return {
+      connected: this.isConnectionActive(),
+      ...(this.connectionInfo || {})
+    };
   }
 }
 
